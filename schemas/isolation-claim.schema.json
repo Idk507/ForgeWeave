@@ -1,0 +1,36 @@
+{
+  "description": "One independently reported containment dimension.",
+  "properties": {
+    "backend": {
+      "title": "Backend",
+      "type": "string"
+    },
+    "evidence": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Evidence"
+    },
+    "level": {
+      "title": "Level",
+      "type": "string"
+    },
+    "measured": {
+      "title": "Measured",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "level",
+    "backend",
+    "measured"
+  ],
+  "title": "IsolationClaim",
+  "type": "object"
+}
