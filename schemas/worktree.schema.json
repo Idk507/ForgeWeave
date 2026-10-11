@@ -1,0 +1,66 @@
+{
+  "$defs": {
+    "WorktreeState": {
+      "description": "Lifecycle for a task-owned worktree record.",
+      "enum": [
+        "active",
+        "locked",
+        "preserved",
+        "cleaned"
+      ],
+      "title": "WorktreeState",
+      "type": "string"
+    }
+  },
+  "description": "Task-owned Git worktree record.",
+  "properties": {
+    "base_commit": {
+      "title": "Base Commit",
+      "type": "string"
+    },
+    "branch": {
+      "title": "Branch",
+      "type": "string"
+    },
+    "dirty": {
+      "default": false,
+      "title": "Dirty",
+      "type": "boolean"
+    },
+    "repository_path": {
+      "title": "Repository Path",
+      "type": "string"
+    },
+    "schema_version": {
+      "default": "worktree.v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "state": {
+      "$ref": "#/$defs/WorktreeState"
+    },
+    "task_id": {
+      "title": "Task Id",
+      "type": "string"
+    },
+    "worktree_id": {
+      "title": "Worktree Id",
+      "type": "string"
+    },
+    "worktree_path": {
+      "title": "Worktree Path",
+      "type": "string"
+    }
+  },
+  "required": [
+    "worktree_id",
+    "task_id",
+    "repository_path",
+    "worktree_path",
+    "base_commit",
+    "branch",
+    "state"
+  ],
+  "title": "Worktree",
+  "type": "object"
+}
