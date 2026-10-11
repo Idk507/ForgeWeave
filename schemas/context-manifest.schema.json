@@ -1,0 +1,155 @@
+{
+  "$defs": {
+    "ContextSpan": {
+      "description": "One ordered unit selected into a model request.",
+      "properties": {
+        "authority": {
+          "title": "Authority",
+          "type": "string"
+        },
+        "redacted": {
+          "default": false,
+          "title": "Redacted",
+          "type": "boolean"
+        },
+        "sensitivity": {
+          "title": "Sensitivity",
+          "type": "string"
+        },
+        "source": {
+          "title": "Source",
+          "type": "string"
+        },
+        "source_hash": {
+          "title": "Source Hash",
+          "type": "string"
+        },
+        "span_id": {
+          "title": "Span Id",
+          "type": "string"
+        },
+        "token_estimate": {
+          "minimum": 0,
+          "title": "Token Estimate",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "span_id",
+        "source",
+        "source_hash",
+        "authority",
+        "sensitivity",
+        "token_estimate"
+      ],
+      "title": "ContextSpan",
+      "type": "object"
+    },
+    "FidelityMode": {
+      "description": "Replay fidelity promised by a context or audit record.",
+      "enum": [
+        "exact",
+        "redacted",
+        "reference-only"
+      ],
+      "title": "FidelityMode",
+      "type": "string"
+    }
+  },
+  "description": "Reconstructable manifest for a provider-bound model request.",
+  "properties": {
+    "adapter_version": {
+      "title": "Adapter Version",
+      "type": "string"
+    },
+    "attempt_id": {
+      "title": "Attempt Id",
+      "type": "string"
+    },
+    "catalog_version": {
+      "title": "Catalog Version",
+      "type": "string"
+    },
+    "effective_config_hash": {
+      "title": "Effective Config Hash",
+      "type": "string"
+    },
+    "effective_policy_hash": {
+      "title": "Effective Policy Hash",
+      "type": "string"
+    },
+    "fidelity": {
+      "$ref": "#/$defs/FidelityMode",
+      "default": "redacted"
+    },
+    "model": {
+      "title": "Model",
+      "type": "string"
+    },
+    "omitted_spans": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Omitted Spans",
+      "type": "array"
+    },
+    "provider": {
+      "title": "Provider",
+      "type": "string"
+    },
+    "request_id": {
+      "title": "Request Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "default": "context-manifest.v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "spans": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/ContextSpan"
+      },
+      "title": "Spans",
+      "type": "array"
+    },
+    "summary_lineage": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Summary Lineage",
+      "type": "array"
+    },
+    "task_id": {
+      "title": "Task Id",
+      "type": "string"
+    },
+    "token_estimate": {
+      "minimum": 0,
+      "title": "Token Estimate",
+      "type": "integer"
+    },
+    "workspace_revision": {
+      "title": "Workspace Revision",
+      "type": "string"
+    }
+  },
+  "required": [
+    "request_id",
+    "task_id",
+    "attempt_id",
+    "provider",
+    "model",
+    "adapter_version",
+    "effective_policy_hash",
+    "effective_config_hash",
+    "workspace_revision",
+    "catalog_version",
+    "token_estimate"
+  ],
+  "title": "ContextManifest",
+  "type": "object"
+}
