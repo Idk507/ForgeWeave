@@ -1,0 +1,96 @@
+{
+  "$defs": {
+    "EffectSet": {
+      "description": "Declared side effects for policy review.",
+      "properties": {
+        "credentials": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Credentials",
+          "type": "array",
+          "uniqueItems": true
+        },
+        "external": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "External",
+          "type": "array",
+          "uniqueItems": true
+        },
+        "network": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Network",
+          "type": "array",
+          "uniqueItems": true
+        },
+        "process": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Process",
+          "type": "array",
+          "uniqueItems": true
+        },
+        "reads": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Reads",
+          "type": "array",
+          "uniqueItems": true
+        },
+        "writes": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Writes",
+          "type": "array",
+          "uniqueItems": true
+        }
+      },
+      "title": "EffectSet",
+      "type": "object"
+    }
+  },
+  "description": "Registered tool schema exposed to a model after policy/context filtering.",
+  "properties": {
+    "description": {
+      "title": "Description",
+      "type": "string"
+    },
+    "effects": {
+      "$ref": "#/$defs/EffectSet"
+    },
+    "input_schema": {
+      "additionalProperties": true,
+      "title": "Input Schema",
+      "type": "object"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "schema_version": {
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "name",
+    "description",
+    "input_schema"
+  ],
+  "title": "ToolSpec",
+  "type": "object"
+}
