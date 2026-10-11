@@ -1,0 +1,94 @@
+{
+  "$defs": {
+    "AcceptanceCriterion": {
+      "description": "Human-visible requirement with an explicit validator.",
+      "properties": {
+        "authority": {
+          "title": "Authority",
+          "type": "string"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "criterion_id": {
+          "title": "Criterion Id",
+          "type": "string"
+        },
+        "origin": {
+          "title": "Origin",
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/ConstraintStatus",
+          "default": "active"
+        },
+        "superseded_by": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Superseded By"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "validator": {
+          "title": "Validator",
+          "type": "string"
+        }
+      },
+      "required": [
+        "criterion_id",
+        "text",
+        "origin",
+        "authority",
+        "validator"
+      ],
+      "title": "AcceptanceCriterion",
+      "type": "object"
+    },
+    "ConstraintStatus": {
+      "description": "Lifecycle for an acceptance criterion or protected requirement.",
+      "enum": [
+        "active",
+        "superseded"
+      ],
+      "title": "ConstraintStatus",
+      "type": "string"
+    }
+  },
+  "description": "Versioned set of completion criteria.",
+  "properties": {
+    "criteria": {
+      "items": {
+        "$ref": "#/$defs/AcceptanceCriterion"
+      },
+      "title": "Criteria",
+      "type": "array"
+    },
+    "spec_id": {
+      "title": "Spec Id",
+      "type": "string"
+    },
+    "version": {
+      "default": 1,
+      "minimum": 1,
+      "title": "Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "spec_id",
+    "criteria"
+  ],
+  "title": "AcceptanceSpec",
+  "type": "object"
+}
