@@ -1,0 +1,91 @@
+{
+  "$defs": {
+    "ActorKind": {
+      "description": "Actor responsible for an event.",
+      "enum": [
+        "user",
+        "system",
+        "model",
+        "tool",
+        "policy",
+        "verifier"
+      ],
+      "title": "ActorKind",
+      "type": "string"
+    },
+    "EventKind": {
+      "description": "Canonical event families persisted in the append-only log.",
+      "enum": [
+        "TaskCreated",
+        "TaskStateChanged",
+        "AttemptStarted",
+        "TurnRecorded",
+        "StepRecorded",
+        "ToolCallRequested",
+        "PolicyDecision",
+        "ToolResult",
+        "ToolFailure",
+        "ArtifactRecorded",
+        "WorktreeRecorded"
+      ],
+      "title": "EventKind",
+      "type": "string"
+    }
+  },
+  "description": "Append-only event identity envelope.",
+  "properties": {
+    "actor": {
+      "$ref": "#/$defs/ActorKind"
+    },
+    "attempt_id": {
+      "title": "Attempt Id",
+      "type": "string"
+    },
+    "correlation_id": {
+      "title": "Correlation Id",
+      "type": "string"
+    },
+    "event_id": {
+      "title": "Event Id",
+      "type": "string"
+    },
+    "kind": {
+      "$ref": "#/$defs/EventKind"
+    },
+    "occurred_at": {
+      "format": "date-time",
+      "title": "Occurred At",
+      "type": "string"
+    },
+    "payload_ref": {
+      "title": "Payload Ref",
+      "type": "string"
+    },
+    "schema_version": {
+      "default": "event.v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "sequence": {
+      "minimum": 1,
+      "title": "Sequence",
+      "type": "integer"
+    },
+    "task_id": {
+      "title": "Task Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "event_id",
+    "task_id",
+    "attempt_id",
+    "sequence",
+    "actor",
+    "kind",
+    "correlation_id",
+    "payload_ref"
+  ],
+  "title": "Event",
+  "type": "object"
+}
