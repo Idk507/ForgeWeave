@@ -1,0 +1,63 @@
+{
+  "$defs": {
+    "AttemptStatus": {
+      "description": "Execution state for one resumable task attempt.",
+      "enum": [
+        "PREPARING",
+        "RUNNING",
+        "WAITING_APPROVAL",
+        "WAITING_EXTERNAL",
+        "VERIFYING",
+        "COMPLETED",
+        "FAILED",
+        "CANCELLED"
+      ],
+      "title": "AttemptStatus",
+      "type": "string"
+    }
+  },
+  "description": "One execution attempt for a task; resume creates a new attempt.",
+  "properties": {
+    "attempt_id": {
+      "title": "Attempt Id",
+      "type": "string"
+    },
+    "completed_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Completed At"
+    },
+    "schema_version": {
+      "default": "attempt.v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "started_at": {
+      "format": "date-time",
+      "title": "Started At",
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/$defs/AttemptStatus"
+    },
+    "task_id": {
+      "title": "Task Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "attempt_id",
+    "task_id",
+    "status"
+  ],
+  "title": "Attempt",
+  "type": "object"
+}
