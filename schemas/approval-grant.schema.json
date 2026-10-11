@@ -1,0 +1,111 @@
+{
+  "$defs": {
+    "ApprovalScope": {
+      "description": "How many matching actions a grant can authorize.",
+      "enum": [
+        "one-action",
+        "bounded-session"
+      ],
+      "title": "ApprovalScope",
+      "type": "string"
+    }
+  },
+  "description": "Human authorization bound to one exact action shape.",
+  "properties": {
+    "argument_hash": {
+      "title": "Argument Hash",
+      "type": "string"
+    },
+    "attempt_id": {
+      "title": "Attempt Id",
+      "type": "string"
+    },
+    "catalog_version": {
+      "title": "Catalog Version",
+      "type": "string"
+    },
+    "consumed_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Consumed At"
+    },
+    "effect_hash": {
+      "title": "Effect Hash",
+      "type": "string"
+    },
+    "expires_at": {
+      "format": "date-time",
+      "title": "Expires At",
+      "type": "string"
+    },
+    "grant_id": {
+      "title": "Grant Id",
+      "type": "string"
+    },
+    "human_actor": {
+      "title": "Human Actor",
+      "type": "string"
+    },
+    "policy_revision": {
+      "title": "Policy Revision",
+      "type": "string"
+    },
+    "revoked_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Revoked At"
+    },
+    "scope": {
+      "$ref": "#/$defs/ApprovalScope",
+      "default": "one-action"
+    },
+    "task_id": {
+      "title": "Task Id",
+      "type": "string"
+    },
+    "tool_name": {
+      "title": "Tool Name",
+      "type": "string"
+    },
+    "tool_schema_version": {
+      "title": "Tool Schema Version",
+      "type": "string"
+    },
+    "workspace_precondition_hash": {
+      "title": "Workspace Precondition Hash",
+      "type": "string"
+    }
+  },
+  "required": [
+    "grant_id",
+    "task_id",
+    "attempt_id",
+    "tool_name",
+    "tool_schema_version",
+    "catalog_version",
+    "argument_hash",
+    "effect_hash",
+    "workspace_precondition_hash",
+    "policy_revision",
+    "human_actor",
+    "expires_at"
+  ],
+  "title": "ApprovalGrant",
+  "type": "object"
+}
