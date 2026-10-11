@@ -1,0 +1,45 @@
+{
+  "description": "One ordered unit selected into a model request.",
+  "properties": {
+    "authority": {
+      "title": "Authority",
+      "type": "string"
+    },
+    "redacted": {
+      "default": false,
+      "title": "Redacted",
+      "type": "boolean"
+    },
+    "sensitivity": {
+      "title": "Sensitivity",
+      "type": "string"
+    },
+    "source": {
+      "title": "Source",
+      "type": "string"
+    },
+    "source_hash": {
+      "title": "Source Hash",
+      "type": "string"
+    },
+    "span_id": {
+      "title": "Span Id",
+      "type": "string"
+    },
+    "token_estimate": {
+      "minimum": 0,
+      "title": "Token Estimate",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "span_id",
+    "source",
+    "source_hash",
+    "authority",
+    "sensitivity",
+    "token_estimate"
+  ],
+  "title": "ContextSpan",
+  "type": "object"
+}
