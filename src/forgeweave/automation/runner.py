@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from .contracts import StepAttempt, WorkflowRunStatus, WorkflowStep, WorkflowStepKind, WorkflowStepStatus
+from .executors import WorkflowExecutionContext, WorkflowExecutorRegistry
 from .planner import StepState, plan_workflow
 from .store import WorkflowStore
 
@@ -34,7 +35,13 @@ class WorkflowRunnerResult:
     execution_started: bool = False
 
 
-def run_workflow_once(store: WorkflowStore, *, run_id: str, max_ready_steps: int | None = None) -> WorkflowRunnerResult:
+def run_workflow_once(
+    store: WorkflowStore,
+    *,
+    run_id: str,
+    max_ready_steps: int | None = None,
+    executors: WorkflowExecutorRegistry | None = None,
+) -> WorkflowRunnerResult:
     """Advance ready workflow steps into persisted attempts without executing effects."""
 
     run = store.get_run(run_id)
@@ -54,7 +61,14 @@ def run_workflow_once(store: WorkflowStore, *, run_id: str, max_ready_steps: int
     recorded: list[WorkflowRunnerStep] = []
     for step_id in ready:
         step = step_by_id[step_id]
-        status, reason = _safe_status_for_step(step, attempt_count=counts.get(step_id, 0))
+        attempt_count = counts.get(step_id, 0)
+        status, reason = _safe_status_for_step(
+            step,
+            run_id=run_id,
+            workflow_id=definition.workflow_id,
+            attempt_count=attempt_count,
+            executors=executors,
+        )
         attempt_id = _attempt_id(run_id, step_id, attempts)
         attempt = store.record_attempt(
             StepAttempt(
@@ -105,11 +119,28 @@ def _retry_aware_states(
     return tuple(states)
 
 
-def _safe_status_for_step(step: WorkflowStep, *, attempt_count: int) -> tuple[WorkflowStepStatus, str]:
+def _safe_status_for_step(
+    step: WorkflowStep,
+    *,
+    run_id: str,
+    workflow_id: str,
+    attempt_count: int,
+    executors: WorkflowExecutorRegistry | None,
+) -> tuple[WorkflowStepStatus, str]:
     if step.kind is WorkflowStepKind.JOIN:
         return WorkflowStepStatus.SUCCEEDED, "join satisfied by persisted dependency state"
     if step.kind is WorkflowStepKind.APPROVAL:
         return WorkflowStepStatus.WAITING_APPROVAL, "approval step requires an external approval boundary"
+    if executors is not None:
+        result = executors.execute(
+            WorkflowExecutionContext(
+                run_id=run_id,
+                workflow_id=workflow_id,
+                step=step,
+                attempt_number=attempt_count + 1,
+            )
+        )
+        return result.status, result.reason
     if attempt_count:
         return WorkflowStepStatus.WAITING_EXTERNAL, f"retry {attempt_count + 1} is deferred until a mediated executor is available"
     return WorkflowStepStatus.WAITING_EXTERNAL, f"{step.kind.value} execution is deferred until a mediated executor is available"
