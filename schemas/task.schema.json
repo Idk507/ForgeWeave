@@ -1,0 +1,51 @@
+{
+  "$defs": {
+    "TaskStatus": {
+      "description": "Canonical task lifecycle states.",
+      "enum": [
+        "CREATED",
+        "PREPARING",
+        "RUNNING",
+        "WAITING_APPROVAL",
+        "WAITING_EXTERNAL",
+        "VERIFYING",
+        "COMPLETED",
+        "FAILED",
+        "CANCELLED"
+      ],
+      "title": "TaskStatus",
+      "type": "string"
+    }
+  },
+  "description": "Top-level user objective.",
+  "properties": {
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "schema_version": {
+      "default": "task.v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/$defs/TaskStatus",
+      "default": "CREATED"
+    },
+    "task_id": {
+      "title": "Task Id",
+      "type": "string"
+    },
+    "title": {
+      "title": "Title",
+      "type": "string"
+    }
+  },
+  "required": [
+    "task_id",
+    "title"
+  ],
+  "title": "Task",
+  "type": "object"
+}
