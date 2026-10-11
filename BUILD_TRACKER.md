@@ -114,6 +114,13 @@ Research gate RG-002 (2026-10-04): Done for documentation scope before BT-008. O
 | 92 | BT-092 | M4.1, M4.10 | Done | Workflow store/list CLI inspection | `src/forgeweave/automation/store.py`, `src/forgeweave/cli/workflow.py`, `src/forgeweave/cli/app.py`; focused store/CLI tests passed 52 tests; full `PYTHONPATH=src python -m unittest discover -s tests/unit` passed 349 tests |
 | 93 | BT-093 | M4.1, M4.10 | Done | Complete workflow CLI admission/resume module | `src/forgeweave/cli/workflow.py`, `src/forgeweave/cli/app.py`; focused CLI tests passed 48 tests; full `PYTHONPATH=src python -m unittest discover -s tests/unit` passed 352 tests |
 | 94 | BT-094 | M4.H3, M4.11 | Done | Built-in workflow templates catalog and CLI | `src/forgeweave/automation/templates.py`, `src/forgeweave/cli/workflow.py`, `src/forgeweave/cli/app.py`; focused template/CLI tests passed 53 tests; full `PYTHONPATH=src python -m unittest discover -s tests/unit` passed 357 tests |
+| 95 | BT-095 | M4.H2, M4.9 | Done | Safe workflow runner tick foundation | `src/forgeweave/automation/runner.py`, `src/forgeweave/cli/workflow.py`, `src/forgeweave/cli/app.py`; focused runner/CLI tests passed 55 tests; full `PYTHONPATH=src python -m unittest discover -s tests/unit` passed 362 tests |
+| 96 | BT-096 | M4.H2, M4.9 | Done | Workflow runner retry-budget projection | `src/forgeweave/automation/runner.py`; focused runner tests passed 5 tests; focused runner/CLI tests passed 56 tests; full `PYTHONPATH=src python -m unittest discover -s tests/unit` passed 363 tests |
+| 97 | BT-097 | M4.H2, M4.9 | Done | Mediated workflow executor registry | `src/forgeweave/automation/executors.py`, `src/forgeweave/automation/runner.py`; focused executor/runner tests passed 9 tests; focused executor/runner/CLI tests passed 60 tests; full `PYTHONPATH=src python -m unittest discover -s tests/unit` passed 367 tests |
+| 98 | BT-098 | M4.H2, M4.9 | Done | Policy-mediated workflow tool executor | `src/forgeweave/automation/tool_executor.py`; focused tool-executor tests passed 4 tests; focused workflow executor/runner/CLI tests passed 64 tests; full `PYTHONPATH=src python -m unittest discover -s tests/unit` passed 371 tests |
+| 99 | BT-099 | M4.9 | Done | Native agent workflow executor | `src/forgeweave/automation/agent_executor.py`; focused agent-executor tests passed 4 tests; focused workflow executor/runner/CLI tests passed 68 tests; full `PYTHONPATH=src python -m unittest discover -s tests/unit` passed 375 tests |
+| 100 | BT-100 | M4.9, M4.10 | Done | Executor-enabled workflow tick CLI | `src/forgeweave/cli/workflow.py`, `src/forgeweave/cli/app.py`; focused CLI tests passed 53 tests; focused workflow executor/CLI tests passed 67 tests; full `PYTHONPATH=src python -m unittest discover -s tests/unit` passed 377 tests |
+| 101 | BT-101 | M4.9 | Done | Workflow verification-step executor | `src/forgeweave/automation/verification_executor.py`; focused verification-executor tests passed 3 tests; focused workflow executor/CLI tests passed 70 tests; full `PYTHONPATH=src python -m unittest discover -s tests/unit` passed 380 tests |
 
 ## Active slice template
 
@@ -139,17 +146,17 @@ RG-003 validation: checked nine affected Markdown files with no missing local li
 
 RG-002 documentation/research gate is validated; BT-008 remains the next runtime slice. Revised later queue: M1.H1-H2 diagnostics/loop fixtures with native loop integration -> M2.H1-H6 research tools, observability, hooks and evals -> M3.H1-H4 custom agents/delegation/joins -> M3.H5-H6 browser-use feasibility/adapter -> M4.H1-H3 durable workflows. Each is split into a small tested slice before implementation; existing BT-001 through BT-007 evidence is preserved. Full requirements are indexed by F01-F31 in `docs/feature-coverage.md`.
 
-Tracker ID: BT-094
-Canonical IDs: M4.H3, M4.11
-Owning module: `src/forgeweave/automation`, `src/forgeweave/cli`
-Acceptance criteria: Add built-in reusable workflow templates for research-plan-implement-test-review, parallel investigation-synthesis and independent patches-integration-verification, with CLI list/show inspection and JSON export.
-Expected checks: focused template and CLI tests; full `PYTHONPATH=src python -m unittest discover -s tests/unit`.
-Security impact: Templates are static WorkflowDefinition objects validated by contract constructors; they do not evaluate arbitrary model-authored code, execute workflow steps, dispatch tools, perform network calls, request approvals or publish artifacts.
-Compatibility constraints: Additive template catalog and CLI inspection commands; no persistence schema, workflow admission or runner behavior changes.
-Files planned: `src/forgeweave/automation/templates.py`, `src/forgeweave/automation/__init__.py`, `src/forgeweave/cli/workflow.py`, `src/forgeweave/cli/app.py`, `tests/unit/test_automation_templates.py`, `tests/unit/test_cli_app.py`, `todo.md`, `BUILD_TRACKER.md`.
+Tracker ID: BT-101
+Canonical IDs: M4.9
+Owning module: `src/forgeweave/automation`
+Acceptance criteria: Add a workflow verification-step executor that runs selected repository verification through existing verification evidence capture and maps passed checks to succeeded and failed/no checks to failed.
+Expected checks: focused verification-executor tests, focused workflow executor/CLI tests; full `PYTHONPATH=src python -m unittest discover -s tests/unit`.
+Security impact: Verification steps run only through explicitly registered workflow executors and existing VerificationRunner evidence capture. No publication, deployment, browser, network or arbitrary model-authored code evaluation is introduced.
+Compatibility constraints: Additive executor module and registration helper; no persistence schema changes and no behavior change unless caller explicitly registers the verification workflow executor.
+Files planned: `src/forgeweave/automation/verification_executor.py`, `src/forgeweave/automation/__init__.py`, `tests/unit/test_automation_verification_executor.py`, `todo.md`, `BUILD_TRACKER.md`.
 Status: Done.
-Evidence: Focused `PYTHONPATH=src python -m unittest tests.unit.test_automation_templates tests.unit.test_cli_app` passed 53 tests; full `PYTHONPATH=src python -m unittest discover -s tests/unit` passed 357 tests on 2026-10-11.
-Open risks: Workflow execution runner remains open; future templates can be added through the same static catalog contract.
+Evidence: Focused `PYTHONPATH=src python -m unittest tests.unit.test_automation_verification_executor` passed 3 tests; focused `PYTHONPATH=src python -m unittest tests.unit.test_automation_verification_executor tests.unit.test_automation_agent_executor tests.unit.test_automation_tool_executor tests.unit.test_automation_runner tests.unit.test_cli_app` passed 70 tests; full `PYTHONPATH=src python -m unittest discover -s tests/unit` passed 380 tests on 2026-10-11.
+Open risks: Leases/fencing, artifact bindings, approval gates and CLI wiring for verification executor options remain open.
 
 
 
