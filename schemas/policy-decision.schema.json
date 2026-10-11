@@ -1,0 +1,77 @@
+{
+  "$defs": {
+    "PolicyOutcome": {
+      "description": "Policy gateway decision for a validated tool call.",
+      "enum": [
+        "allow",
+        "deny",
+        "ask"
+      ],
+      "title": "PolicyOutcome",
+      "type": "string"
+    }
+  },
+  "description": "Decision made by the policy gateway for one tool call.",
+  "properties": {
+    "approval_grant_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Approval Grant Id"
+    },
+    "attempt_id": {
+      "title": "Attempt Id",
+      "type": "string"
+    },
+    "decided_at": {
+      "format": "date-time",
+      "title": "Decided At",
+      "type": "string"
+    },
+    "decision_id": {
+      "title": "Decision Id",
+      "type": "string"
+    },
+    "outcome": {
+      "$ref": "#/$defs/PolicyOutcome"
+    },
+    "policy_revision": {
+      "title": "Policy Revision",
+      "type": "string"
+    },
+    "reason": {
+      "title": "Reason",
+      "type": "string"
+    },
+    "schema_version": {
+      "default": "policy-decision.v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "task_id": {
+      "title": "Task Id",
+      "type": "string"
+    },
+    "tool_call_id": {
+      "title": "Tool Call Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "decision_id",
+    "task_id",
+    "attempt_id",
+    "tool_call_id",
+    "outcome",
+    "reason",
+    "policy_revision"
+  ],
+  "title": "PolicyDecision",
+  "type": "object"
+}
