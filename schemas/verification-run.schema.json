@@ -1,0 +1,114 @@
+{
+  "description": "Evidence from one verifier execution over an exact workspace input.",
+  "properties": {
+    "command_argv": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Command Argv",
+      "type": "array"
+    },
+    "config_hash": {
+      "title": "Config Hash",
+      "type": "string"
+    },
+    "criterion_ids": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Criterion Ids",
+      "type": "array"
+    },
+    "cwd": {
+      "title": "Cwd",
+      "type": "string"
+    },
+    "environment_profile_hash": {
+      "title": "Environment Profile Hash",
+      "type": "string"
+    },
+    "exit_code": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Exit Code"
+    },
+    "outcome": {
+      "default": "passed",
+      "enum": [
+        "passed",
+        "failed",
+        "inconclusive"
+      ],
+      "title": "Outcome",
+      "type": "string"
+    },
+    "output_artifact_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Output Artifact Id"
+    },
+    "run_id": {
+      "title": "Run Id",
+      "type": "string"
+    },
+    "task_id": {
+      "title": "Task Id",
+      "type": "string"
+    },
+    "timeout_seconds": {
+      "anyOf": [
+        {
+          "minimum": 1,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Timeout Seconds"
+    },
+    "untracked_input_hashes": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "title": "Untracked Input Hashes",
+      "type": "object"
+    },
+    "verifier_version": {
+      "title": "Verifier Version",
+      "type": "string"
+    },
+    "workspace_fingerprint": {
+      "title": "Workspace Fingerprint",
+      "type": "string"
+    }
+  },
+  "required": [
+    "run_id",
+    "task_id",
+    "criterion_ids",
+    "command_argv",
+    "cwd",
+    "environment_profile_hash",
+    "verifier_version",
+    "config_hash",
+    "workspace_fingerprint"
+  ],
+  "title": "VerificationRun",
+  "type": "object"
+}
