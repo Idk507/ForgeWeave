@@ -1,0 +1,71 @@
+{
+  "$defs": {
+    "ToolExecutionState": {
+      "description": "Execution-level state, separate from task lifecycle.",
+      "enum": [
+        "REQUESTED",
+        "AUTHORIZED",
+        "DISPATCHING",
+        "SUCCEEDED",
+        "FAILED",
+        "CANCELLED",
+        "OUTCOME_UNKNOWN"
+      ],
+      "title": "ToolExecutionState",
+      "type": "string"
+    }
+  },
+  "description": "Recorded tool invocation state used for restart reconciliation.",
+  "properties": {
+    "attempt_id": {
+      "title": "Attempt Id",
+      "type": "string"
+    },
+    "effect_hash": {
+      "title": "Effect Hash",
+      "type": "string"
+    },
+    "execution_id": {
+      "title": "Execution Id",
+      "type": "string"
+    },
+    "idempotency_key": {
+      "title": "Idempotency Key",
+      "type": "string"
+    },
+    "reconciliation_evidence": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Reconciliation Evidence"
+    },
+    "state": {
+      "$ref": "#/$defs/ToolExecutionState"
+    },
+    "task_id": {
+      "title": "Task Id",
+      "type": "string"
+    },
+    "tool_name": {
+      "title": "Tool Name",
+      "type": "string"
+    }
+  },
+  "required": [
+    "execution_id",
+    "task_id",
+    "attempt_id",
+    "tool_name",
+    "state",
+    "effect_hash",
+    "idempotency_key"
+  ],
+  "title": "ToolExecution",
+  "type": "object"
+}
