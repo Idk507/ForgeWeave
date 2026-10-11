@@ -1,0 +1,29 @@
+{
+  "description": "Conversation/session root for a task.",
+  "properties": {
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "schema_version": {
+      "default": "session.v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "session_id": {
+      "title": "Session Id",
+      "type": "string"
+    },
+    "task_id": {
+      "title": "Task Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "session_id",
+    "task_id"
+  ],
+  "title": "Session",
+  "type": "object"
+}
