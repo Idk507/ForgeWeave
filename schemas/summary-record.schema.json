@@ -1,0 +1,88 @@
+{
+  "description": "Validated, disposable projection over lossless events.",
+  "properties": {
+    "changed_file_hashes": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "title": "Changed File Hashes",
+      "type": "object"
+    },
+    "cited_decisions": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Cited Decisions",
+      "type": "array"
+    },
+    "constraint_ledger_hash": {
+      "title": "Constraint Ledger Hash",
+      "type": "string"
+    },
+    "covered_constraint_ids": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Covered Constraint Ids",
+      "type": "array"
+    },
+    "protected_constraint_ids": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Protected Constraint Ids",
+      "type": "array"
+    },
+    "schema_version": {
+      "default": "summary-record.v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "source_event_range": {
+      "maxItems": 2,
+      "minItems": 2,
+      "prefixItems": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "string"
+        }
+      ],
+      "title": "Source Event Range",
+      "type": "array"
+    },
+    "summary_id": {
+      "title": "Summary Id",
+      "type": "string"
+    },
+    "task_id": {
+      "title": "Task Id",
+      "type": "string"
+    },
+    "unresolved_work": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Unresolved Work",
+      "type": "array"
+    },
+    "verification_fingerprint": {
+      "title": "Verification Fingerprint",
+      "type": "string"
+    }
+  },
+  "required": [
+    "summary_id",
+    "task_id",
+    "source_event_range",
+    "verification_fingerprint",
+    "constraint_ledger_hash"
+  ],
+  "title": "SummaryRecord",
+  "type": "object"
+}
