@@ -9,6 +9,9 @@ from pathlib import Path
 from typing import Any
 
 from forgeweave.automation import (
+    NativeAgentWorkflowExecutorConfig,
+    ToolWorkflowExecutorConfig,
+    WorkflowExecutorRegistry,
     JoinMode,
     JoinPolicy,
     WorkflowDefinition,
@@ -20,6 +23,8 @@ from forgeweave.automation import (
     WorkflowStep,
     WorkflowStepKind,
     WorkflowStore,
+    register_native_agent_workflow_executor,
+    register_tool_workflow_executor,
     WorkflowTemplate,
     get_workflow_template,
     list_workflow_templates,
@@ -28,6 +33,10 @@ from forgeweave.automation import (
     workflow_input_hash,
     workflow_status_view,
 )
+from forgeweave.cli.run import _registry as _build_cli_tool_registry
+from forgeweave.models import FakeModelProvider, ModelChunk
+from forgeweave.policy import PolicyGateway, PolicyRule
+from forgeweave.contracts import PolicyOutcome
 
 
 @dataclass(frozen=True)
@@ -288,14 +297,65 @@ def render_workflow_run_admission(view: WorkflowRunAdmissionView, *, as_json: bo
     )
 
 
-def workflow_tick_from_store(store_path: Path, *, run_id: str, max_ready_steps: int | None = None) -> WorkflowRunnerResult:
-    """Run one safe workflow scheduler tick over a persisted run."""
+def workflow_tick_from_store(
+    store_path: Path,
+    *,
+    run_id: str,
+    max_ready_steps: int | None = None,
+    executors: WorkflowExecutorRegistry | None = None,
+) -> WorkflowRunnerResult:
+    """Run one workflow scheduler tick over a persisted run."""
 
     store = WorkflowStore.open(store_path)
     try:
-        return run_workflow_once(store, run_id=run_id, max_ready_steps=max_ready_steps)
+        return run_workflow_once(store, run_id=run_id, max_ready_steps=max_ready_steps, executors=executors)
     finally:
         store.close()
+
+
+def workflow_executors_for_cli_tick(
+    *,
+    enable_native_agent: bool = False,
+    enable_tool: bool = False,
+    fake_response: str | None = None,
+    fake_tool_call: str | None = None,
+    repo_root: Path | None = None,
+    dry_run: bool = False,
+) -> WorkflowExecutorRegistry | None:
+    """Build opt-in workflow executors for a CLI tick."""
+
+    if not enable_native_agent and not enable_tool:
+        return None
+    if fake_response is not None and fake_tool_call is not None:
+        raise ValueError("use either --fake-response or --fake-tool-call, not both")
+    registry = WorkflowExecutorRegistry()
+    tool_registry = _build_cli_tool_registry((repo_root or Path.cwd()).resolve(), dry_run=dry_run)
+    policy = PolicyGateway(
+        policy_revision="policy-v1",
+        rules=(PolicyRule(tool_name="write_text", outcome=PolicyOutcome.ALLOW, reason="workflow tick explicit write"),),
+    )
+    if enable_native_agent:
+        register_native_agent_workflow_executor(
+            registry,
+            NativeAgentWorkflowExecutorConfig(
+                provider=FakeModelProvider(_fake_chunks(fake_response=fake_response, fake_tool_call=fake_tool_call)),
+                registry=tool_registry,
+                policy=policy,
+                workspace_precondition_hash="sha256:workflow-cli",
+                task_id="workflow-cli",
+            ),
+        )
+    if enable_tool:
+        register_tool_workflow_executor(
+            registry,
+            ToolWorkflowExecutorConfig(
+                registry=tool_registry,
+                policy=policy,
+                workspace_precondition_hash="sha256:workflow-cli",
+                task_id="workflow-cli",
+            ),
+        )
+    return registry
 
 
 def render_workflow_tick(view: WorkflowRunnerResult, *, as_json: bool = False) -> str:
@@ -472,6 +532,12 @@ def _join(values: list[str]) -> str:
 
 
 
+
+
+def _fake_chunks(*, fake_response: str | None, fake_tool_call: str | None) -> tuple[ModelChunk, ...]:
+    if fake_tool_call is not None:
+        return (ModelChunk(kind="tool_call", call_id="workflow-call-1", content=fake_tool_call), ModelChunk(kind="done"))
+    return (ModelChunk(kind="text", content=fake_response or ""), ModelChunk(kind="done"))
 
 
 def _template_summary(template: WorkflowTemplate) -> WorkflowTemplateSummary:
