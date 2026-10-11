@@ -1,0 +1,61 @@
+{
+  "description": "Declared side effects for policy review.",
+  "properties": {
+    "credentials": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Credentials",
+      "type": "array",
+      "uniqueItems": true
+    },
+    "external": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "External",
+      "type": "array",
+      "uniqueItems": true
+    },
+    "network": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Network",
+      "type": "array",
+      "uniqueItems": true
+    },
+    "process": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Process",
+      "type": "array",
+      "uniqueItems": true
+    },
+    "reads": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Reads",
+      "type": "array",
+      "uniqueItems": true
+    },
+    "writes": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Writes",
+      "type": "array",
+      "uniqueItems": true
+    }
+  },
+  "title": "EffectSet",
+  "type": "object"
+}
