@@ -1,0 +1,68 @@
+{
+  "$defs": {
+    "TurnRole": {
+      "description": "Model conversation roles retained by the session log.",
+      "enum": [
+        "user",
+        "assistant",
+        "tool",
+        "system"
+      ],
+      "title": "TurnRole",
+      "type": "string"
+    }
+  },
+  "description": "One model-visible or user-visible conversation turn.",
+  "properties": {
+    "attempt_id": {
+      "title": "Attempt Id",
+      "type": "string"
+    },
+    "content_ref": {
+      "title": "Content Ref",
+      "type": "string"
+    },
+    "context_manifest_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Context Manifest Id"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "role": {
+      "$ref": "#/$defs/TurnRole"
+    },
+    "schema_version": {
+      "default": "turn.v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "task_id": {
+      "title": "Task Id",
+      "type": "string"
+    },
+    "turn_id": {
+      "title": "Turn Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "turn_id",
+    "task_id",
+    "attempt_id",
+    "role",
+    "content_ref"
+  ],
+  "title": "Turn",
+  "type": "object"
+}
