@@ -1,0 +1,29 @@
+{
+  "description": "Successful tool observation.",
+  "properties": {
+    "call_id": {
+      "title": "Call Id",
+      "type": "string"
+    },
+    "output_hash": {
+      "title": "Output Hash",
+      "type": "string"
+    },
+    "output_ref": {
+      "title": "Output Ref",
+      "type": "string"
+    },
+    "schema_version": {
+      "default": "tool-result.v1",
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "call_id",
+    "output_ref",
+    "output_hash"
+  ],
+  "title": "ToolResult",
+  "type": "object"
+}
