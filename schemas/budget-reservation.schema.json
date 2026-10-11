@@ -1,0 +1,57 @@
+{
+  "description": "Conservative reservation for a future or completed operation.",
+  "properties": {
+    "actual_cost": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Actual Cost"
+    },
+    "actual_tokens": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Actual Tokens"
+    },
+    "estimated_cost": {
+      "minimum": 0,
+      "title": "Estimated Cost",
+      "type": "number"
+    },
+    "estimated_tokens": {
+      "minimum": 0,
+      "title": "Estimated Tokens",
+      "type": "integer"
+    },
+    "purpose": {
+      "title": "Purpose",
+      "type": "string"
+    },
+    "reservation_id": {
+      "title": "Reservation Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "reservation_id",
+    "purpose",
+    "estimated_tokens",
+    "estimated_cost"
+  ],
+  "title": "BudgetReservation",
+  "type": "object"
+}
