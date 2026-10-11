@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "forgeweave"
+version = "0.0.1.dev0"
+description = "Model-independent Python CLI coding agent harness"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+dependencies = ["pydantic>=2.12"]
+
+[project.scripts]
+fw = "forgeweave.cli.app:main"
+
+[project.optional-dependencies]
+# Exact pins: DeepSeek packages are pre-release. Never co-install the unrelated PyPI package "deepseek-harness".
+engine-deepseek = [
+  "deepseek-harness-sdk==0.1.5rc1",
+  "deepseek-harness-runtime-bin==0.1.5rc1",
+]
+engine-codex = ["openai-codex==0.159.3"]
+model-openai = ["openai>=2.24.0"]
+quality-codex-harness = ["codex-harness==0.1.1; python_version >= '3.12'"]
+dev = ["pytest", "ruff", "mypy", "import-linter"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
