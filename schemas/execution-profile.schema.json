@@ -1,0 +1,72 @@
+{
+  "$defs": {
+    "IsolationClaim": {
+      "description": "One independently reported containment dimension.",
+      "properties": {
+        "backend": {
+          "title": "Backend",
+          "type": "string"
+        },
+        "evidence": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Evidence"
+        },
+        "level": {
+          "title": "Level",
+          "type": "string"
+        },
+        "measured": {
+          "title": "Measured",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "level",
+        "backend",
+        "measured"
+      ],
+      "title": "IsolationClaim",
+      "type": "object"
+    }
+  },
+  "description": "Effective execution limits; a worktree alone is not a sandbox.",
+  "properties": {
+    "credentials": {
+      "$ref": "#/$defs/IsolationClaim"
+    },
+    "filesystem": {
+      "$ref": "#/$defs/IsolationClaim"
+    },
+    "network": {
+      "$ref": "#/$defs/IsolationClaim"
+    },
+    "process_tree": {
+      "$ref": "#/$defs/IsolationClaim"
+    },
+    "profile_id": {
+      "title": "Profile Id",
+      "type": "string"
+    },
+    "resources": {
+      "$ref": "#/$defs/IsolationClaim"
+    }
+  },
+  "required": [
+    "profile_id",
+    "filesystem",
+    "network",
+    "credentials",
+    "process_tree",
+    "resources"
+  ],
+  "title": "ExecutionProfile",
+  "type": "object"
+}
