@@ -402,6 +402,113 @@ class CliAppTests(unittest.TestCase):
         self.assertEqual(payload["recorded_steps"][0]["step_id"], "research")
         self.assertEqual(payload["recorded_steps"][0]["status"], WorkflowStepStatus.WAITING_EXTERNAL.value)
 
+    def test_workflow_tick_command_can_run_native_agent_executor(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            workflow_store = Path(tmp) / "workflows.db"
+            store = WorkflowStore.open(workflow_store)
+            try:
+                definition = WorkflowDefinition(
+                    workflow_id="wf-agent-tick",
+                    version=1,
+                    steps=(WorkflowStep(step_id="agent", kind=WorkflowStepKind.AGENT, parameters={"prompt": "finish"}),),
+                    input_schema={},
+                    output_schema={},
+                )
+                store.record_definition(definition)
+                store.admit_run(
+                    WorkflowRun(
+                        run_id="run-1",
+                        workflow_id=definition.workflow_id,
+                        definition_hash=definition.definition_hash,
+                        input_hash=workflow_input_hash({}),
+                    )
+                )
+            finally:
+                store.close()
+            stdout = StringIO()
+
+            exit_code = main(
+                [
+                    "workflow",
+                    "tick",
+                    "--workflow-store",
+                    str(workflow_store),
+                    "--run-id",
+                    "run-1",
+                    "--enable-native-agent-executor",
+                    "--fake-response",
+                    "done",
+                    "--json",
+                ],
+                stdout=stdout,
+            )
+
+        self.assertEqual(exit_code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(payload["recorded_steps"][0]["step_id"], "agent")
+        self.assertEqual(payload["recorded_steps"][0]["status"], WorkflowStepStatus.SUCCEEDED.value)
+        self.assertIn("native agent loop completed", payload["recorded_steps"][0]["reason"])
+
+    def test_workflow_tick_command_can_run_tool_executor_in_dry_run(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            workflow_store = Path(tmp) / "workflows.db"
+            repo_root = Path(tmp) / "repo"
+            repo_root.mkdir()
+            store = WorkflowStore.open(workflow_store)
+            try:
+                definition = WorkflowDefinition(
+                    workflow_id="wf-tool-tick",
+                    version=1,
+                    steps=(
+                        WorkflowStep(
+                            step_id="write",
+                            kind=WorkflowStepKind.TOOL,
+                            parameters={
+                                "tool_name": "write_text",
+                                "tool_schema_version": "write-text.v1",
+                                "arguments": {"path": "out.txt", "content": "hello"},
+                            },
+                        ),
+                    ),
+                    input_schema={},
+                    output_schema={},
+                )
+                store.record_definition(definition)
+                store.admit_run(
+                    WorkflowRun(
+                        run_id="run-1",
+                        workflow_id=definition.workflow_id,
+                        definition_hash=definition.definition_hash,
+                        input_hash=workflow_input_hash({}),
+                    )
+                )
+            finally:
+                store.close()
+            stdout = StringIO()
+
+            exit_code = main(
+                [
+                    "workflow",
+                    "tick",
+                    "--workflow-store",
+                    str(workflow_store),
+                    "--run-id",
+                    "run-1",
+                    "--enable-tool-executor",
+                    "--repo-root",
+                    str(repo_root),
+                    "--dry-run",
+                    "--json",
+                ],
+                stdout=stdout,
+            )
+
+        self.assertEqual(exit_code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(payload["recorded_steps"][0]["step_id"], "write")
+        self.assertEqual(payload["recorded_steps"][0]["status"], WorkflowStepStatus.SUCCEEDED.value)
+        self.assertFalse((repo_root / "out.txt").exists())
+
     def test_workflow_status_command_renders_persisted_projection_as_json(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             workflow_store = Path(tmp) / "workflows.db"
