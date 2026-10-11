@@ -1,0 +1,73 @@
+{
+  "$defs": {
+    "ArtifactKind": {
+      "description": "Artifact payload categories.",
+      "enum": [
+        "text",
+        "json",
+        "binary",
+        "patch",
+        "log"
+      ],
+      "title": "ArtifactKind",
+      "type": "string"
+    }
+  },
+  "description": "Content-addressed task artifact metadata.",
+  "properties": {
+    "artifact_id": {
+      "title": "Artifact Id",
+      "type": "string"
+    },
+    "kind": {
+      "$ref": "#/$defs/ArtifactKind"
+    },
+    "redacted": {
+      "default": false,
+      "title": "Redacted",
+      "type": "boolean"
+    },
+    "retention": {
+      "default": "default",
+      "enum": [
+        "default",
+        "exact-opt-in",
+        "tombstone"
+      ],
+      "title": "Retention",
+      "type": "string"
+    },
+    "schema_version": {
+      "default": "artifact.v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "sha256": {
+      "title": "Sha256",
+      "type": "string"
+    },
+    "size_bytes": {
+      "minimum": 0,
+      "title": "Size Bytes",
+      "type": "integer"
+    },
+    "task_id": {
+      "title": "Task Id",
+      "type": "string"
+    },
+    "uri": {
+      "title": "Uri",
+      "type": "string"
+    }
+  },
+  "required": [
+    "artifact_id",
+    "task_id",
+    "kind",
+    "uri",
+    "sha256",
+    "size_bytes"
+  ],
+  "title": "Artifact",
+  "type": "object"
+}
