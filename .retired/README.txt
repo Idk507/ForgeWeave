@@ -1,0 +1,1 @@
+Temporary copies after moving adapters into src/forgeweave/engines/general.py. Safe to delete this folder.
