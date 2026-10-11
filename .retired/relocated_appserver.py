@@ -1,0 +1,1 @@
+# leftover copy; adapters now live in src/forgeweave/engines/general.py
