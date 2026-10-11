@@ -1,0 +1,96 @@
+{
+  "$defs": {
+    "BudgetReservation": {
+      "description": "Conservative reservation for a future or completed operation.",
+      "properties": {
+        "actual_cost": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Actual Cost"
+        },
+        "actual_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Actual Tokens"
+        },
+        "estimated_cost": {
+          "minimum": 0,
+          "title": "Estimated Cost",
+          "type": "number"
+        },
+        "estimated_tokens": {
+          "minimum": 0,
+          "title": "Estimated Tokens",
+          "type": "integer"
+        },
+        "purpose": {
+          "title": "Purpose",
+          "type": "string"
+        },
+        "reservation_id": {
+          "title": "Reservation Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "reservation_id",
+        "purpose",
+        "estimated_tokens",
+        "estimated_cost"
+      ],
+      "title": "BudgetReservation",
+      "type": "object"
+    }
+  },
+  "description": "Token and money ledger that keeps missing usage reserved.",
+  "properties": {
+    "currency": {
+      "title": "Currency",
+      "type": "string"
+    },
+    "price_source_version": {
+      "title": "Price Source Version",
+      "type": "string"
+    },
+    "reservations": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/BudgetReservation"
+      },
+      "title": "Reservations",
+      "type": "array"
+    },
+    "schema_version": {
+      "default": "budget-ledger.v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "task_id": {
+      "title": "Task Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "task_id",
+    "currency",
+    "price_source_version"
+  ],
+  "title": "BudgetLedger",
+  "type": "object"
+}
