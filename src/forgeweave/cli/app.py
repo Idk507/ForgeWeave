@@ -33,6 +33,7 @@ from forgeweave.cli.workflow import (
     render_workflow_validation,
     resume_workflow_run_from_store,
     validate_workflow_definition_file,
+    workflow_executors_for_cli_tick,
     workflow_inputs_from_json,
     workflow_list_from_store,
     workflow_status_from_store,
@@ -210,6 +211,12 @@ def _build_parser() -> argparse.ArgumentParser:
     workflow_tick.add_argument("--workflow-store", required=True, help="Path to a ForgeWeave workflow SQLite store")
     workflow_tick.add_argument("--run-id", required=True, help="Workflow run id to advance")
     workflow_tick.add_argument("--max-ready-steps", type=int, help="Maximum ready steps to record in this tick")
+    workflow_tick.add_argument("--enable-native-agent-executor", action="store_true", help="Run agent steps through the native-loop executor")
+    workflow_tick.add_argument("--enable-tool-executor", action="store_true", help="Run tool steps through the policy-mediated tool executor")
+    workflow_tick.add_argument("--fake-response", help="Deterministic native-agent text response for executor-enabled ticks")
+    workflow_tick.add_argument("--fake-tool-call", help="Deterministic native-agent tool-call JSON for executor-enabled ticks")
+    workflow_tick.add_argument("--repo-root", help="Repository root for workflow tool execution")
+    workflow_tick.add_argument("--dry-run", action="store_true", help="Observe workflow tool writes without applying workspace changes")
     workflow_tick.add_argument("--json", action="store_true", dest="as_json", help="Emit machine-readable JSON")
 
     workflow_status = workflow_subcommands.add_parser("status", help="Show a persisted workflow run status projection")
@@ -332,7 +339,15 @@ def _dispatch(args: argparse.Namespace) -> str:
         if args.workflow_template_command == "show":
             return render_workflow_template(workflow_template_view(args.template_id), as_json=args.as_json)
     if args.command == "workflow" and args.workflow_command == "tick":
-        view = workflow_tick_from_store(Path(args.workflow_store), run_id=args.run_id, max_ready_steps=args.max_ready_steps)
+        executors = workflow_executors_for_cli_tick(
+            enable_native_agent=args.enable_native_agent_executor,
+            enable_tool=args.enable_tool_executor,
+            fake_response=args.fake_response,
+            fake_tool_call=args.fake_tool_call,
+            repo_root=Path(args.repo_root) if args.repo_root else None,
+            dry_run=args.dry_run,
+        )
+        view = workflow_tick_from_store(Path(args.workflow_store), run_id=args.run_id, max_ready_steps=args.max_ready_steps, executors=executors)
         return render_workflow_tick(view, as_json=args.as_json)
     if args.command == "workflow" and args.workflow_command == "status":
         view = workflow_status_from_store(Path(args.workflow_store), run_id=args.run_id)
