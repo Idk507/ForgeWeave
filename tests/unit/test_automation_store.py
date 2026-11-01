@@ -8,6 +8,7 @@ from forgeweave.automation import (
     JoinMode,
     JoinPolicy,
     StepAttempt,
+    WorkflowArtifactRecord,
     WorkflowDefinition,
     WorkflowRun,
     WorkflowRunStatus,
@@ -103,14 +104,65 @@ class WorkflowStoreTests(unittest.TestCase):
 
     def test_updates_attempt_status_preserving_lease_and_key(self) -> None:
         run = self._admit_run()
-        attempt = StepAttempt(attempt_id="attempt-1", run_id=run.run_id, step_id="research", idempotency_key="key", lease_token="lease")
+        attempt = StepAttempt(attempt_id="attempt-1", run_id=run.run_id, step_id="research", idempotency_key="key", lease_token="lease", worker_id="worker-1")
         self.store.record_attempt(attempt)
 
         updated = self.store.update_attempt_status("attempt-1", WorkflowStepStatus.SUCCEEDED)
 
         self.assertEqual(updated.status, WorkflowStepStatus.SUCCEEDED)
         self.assertEqual(updated.lease_token, "lease")
+        self.assertEqual(updated.worker_id, "worker-1")
         self.assertEqual(updated.idempotency_key, "key")
+
+
+    def test_records_artifact_provenance_idempotently(self) -> None:
+        run = self._admit_run()
+        attempt = StepAttempt(attempt_id="attempt-1", run_id=run.run_id, step_id="research", idempotency_key="key")
+        self.store.record_attempt(attempt)
+        artifact = WorkflowArtifactRecord(
+            artifact_id="artifact-1",
+            run_id=run.run_id,
+            step_id="research",
+            attempt_id="attempt-1",
+            name="patch",
+            uri="artifact://patch-1",
+            metadata={"sha256": "abc"},
+        )
+
+        first = self.store.record_artifact(artifact)
+        second = self.store.record_artifact(artifact)
+
+        self.assertEqual(first, artifact)
+        self.assertEqual(second, artifact)
+        self.assertEqual(self.store.list_artifacts(run_id=run.run_id), (artifact,))
+        self.assertEqual(self.store.list_artifacts(attempt_id="attempt-1"), (artifact,))
+
+    def test_rejects_conflicting_artifact_provenance(self) -> None:
+        run = self._admit_run()
+        attempt = StepAttempt(attempt_id="attempt-1", run_id=run.run_id, step_id="research", idempotency_key="key")
+        self.store.record_attempt(attempt)
+        first = WorkflowArtifactRecord(
+            artifact_id="artifact-1",
+            run_id=run.run_id,
+            step_id="research",
+            attempt_id="attempt-1",
+            name="patch",
+            uri="artifact://patch-1",
+        )
+        second = WorkflowArtifactRecord(
+            artifact_id="artifact-2",
+            run_id=run.run_id,
+            step_id="research",
+            attempt_id="attempt-1",
+            name="patch",
+            uri="artifact://patch-2",
+        )
+        self.store.record_artifact(first)
+
+        with self.assertRaises(WorkflowStoreError) as raised:
+            self.store.record_artifact(second)
+
+        self.assertEqual(raised.exception.code, "ARTIFACT_CONFLICT")
 
     def _admit_run(self) -> WorkflowRun:
         self.store.record_definition(self.definition)
