@@ -12,6 +12,7 @@ from typing import Sequence, TextIO
 from forgeweave.cli.config import current_config_view, render_config
 from forgeweave.cli.report import render_final_report_from_files
 from forgeweave.cli.run import NativeRunConfig, render_native_run, run_native_once
+from forgeweave.core.runtime import inspect_local_task, run_local_task
 from forgeweave.cli.slash import parse_slash_command, render_slash_command
 from forgeweave.cli.status import TaskStatusView, render_task_status, task_status_from_event_store
 from forgeweave.cli.task import (
@@ -24,15 +25,22 @@ from forgeweave.cli.task import (
 )
 from forgeweave.cli.workflow import (
     admit_workflow_run_from_file,
+    cancel_workflow_run_from_store,
+    render_workflow_approval_decision,
+    render_workflow_cancellation,
     render_workflow_list,
+    render_workflow_recovery,
     render_workflow_status,
     render_workflow_template,
     render_workflow_template_list,
     render_workflow_tick,
     render_workflow_run_admission,
     render_workflow_validation,
+    recover_workflow_run_from_store,
     resume_workflow_run_from_store,
+    validate_definition_for_resume,
     validate_workflow_definition_file,
+    workflow_approval_decision_from_store,
     workflow_executors_for_cli_tick,
     workflow_inputs_from_json,
     workflow_list_from_store,
@@ -72,6 +80,9 @@ def main(argv: Sequence[str] | None = None, *, stdout: TextIO | None = None, std
 
     if rendered:
         print(rendered, file=output)
+    if args.command == "run" and getattr(args, "state_dir", None) and rendered:
+        if json.loads(rendered)["task_status"] != "COMPLETED":
+            return 1
     return 0
 
 
@@ -89,6 +100,10 @@ def _build_parser() -> argparse.ArgumentParser:
     tool_call_group.add_argument("--fake-tool-call", help="Deterministic ForgeWeave tool-call JSON for local testing")
     tool_call_group.add_argument("--fake-tool-call-file", help="UTF-8 file containing deterministic ForgeWeave tool-call JSON")
     run.add_argument("--repo-root", help="Repository root for tool execution and verified dispatch")
+    run.add_argument("--state-dir", help="External directory for durable task state and owned worktrees")
+    run.add_argument("--allow-host-execution", action="store_true", help="Authorize unconfined local Git and test processes")
+    run.add_argument("--mode", choices=("plan", "implement"), default="plan")
+    run.add_argument("--allow-write", action="append", default=[], help="Authorize one workspace-relative file for editing")
     run.add_argument("--snapshot-dir", help="Directory for Git patch snapshots")
     run.add_argument("--target", action="append", dest="targets", help="Analyzer target path; repeatable")
     run.add_argument("--config-hash", help="Hash of effective analyzer configuration")
@@ -141,6 +156,10 @@ def _build_parser() -> argparse.ArgumentParser:
 
     task = subcommands.add_parser("task", help="Inspect task state")
     task_subcommands = task.add_subparsers(dest="task_command", required=True)
+    task_inspect = task_subcommands.add_parser("inspect", help="Inspect a durable local task and its worktree")
+    task_inspect.add_argument("--state-dir", required=True)
+    task_inspect.add_argument("--task-id", required=True)
+    task_inspect.add_argument("--json", action="store_true", dest="as_json")
     task_status = task_subcommands.add_parser("status", help="Show a task status projection")
     task_source = task_status.add_mutually_exclusive_group(required=True)
     task_source.add_argument("--task-file", help="Path to a task status projection JSON file")
@@ -197,7 +216,45 @@ def _build_parser() -> argparse.ArgumentParser:
     workflow_resume = workflow_subcommands.add_parser("resume", help="Resume a failed or waiting workflow run")
     workflow_resume.add_argument("--workflow-store", required=True, help="Path to a ForgeWeave workflow SQLite store")
     workflow_resume.add_argument("--run-id", required=True, help="Workflow run id to resume")
+    workflow_resume.add_argument("--definition-file", help="Optional workflow definition file that must match the admitted run")
+    workflow_resume.add_argument("--input-json", help="Optional workflow input JSON object that must match the admitted run")
+    workflow_resume.add_argument("--input-file", help="Optional workflow input file that must match the admitted run")
     workflow_resume.add_argument("--json", action="store_true", dest="as_json", help="Emit machine-readable JSON")
+
+    workflow_cancel = workflow_subcommands.add_parser("cancel", help="Cancel a workflow run and bounded active attempts")
+    workflow_cancel.add_argument("--workflow-store", required=True, help="Path to a ForgeWeave workflow SQLite store")
+    workflow_cancel.add_argument("--run-id", required=True, help="Workflow run id to cancel")
+    workflow_cancel.add_argument("--reason", required=True, help="Cancellation reason")
+    workflow_cancel.add_argument("--max-attempts", type=int, default=0, help="Maximum active/waiting attempts to cancel")
+    workflow_cancel.add_argument("--json", action="store_true", dest="as_json", help="Emit machine-readable JSON")
+
+    workflow_recover = workflow_subcommands.add_parser("recover", help="Reconcile in-flight workflow attempts after restart")
+    workflow_recover.add_argument("--workflow-store", required=True, help="Path to a ForgeWeave workflow SQLite store")
+    workflow_recover.add_argument("--run-id", required=True, help="Workflow run id to recover")
+    workflow_recover.add_argument("--max-attempts", type=int, default=0, help="Maximum in-flight attempts to reconcile")
+    workflow_recover.add_argument("--inspect-only", action="store_true", help="Report in-flight attempts without changing their status")
+    workflow_recover.add_argument("--json", action="store_true", dest="as_json", help="Emit machine-readable JSON")
+
+    workflow_approve = workflow_subcommands.add_parser("approve", help="Approve a waiting workflow approval step")
+    workflow_approve.add_argument("--workflow-store", required=True, help="Path to a ForgeWeave workflow SQLite store")
+    workflow_approve.add_argument("--run-id", required=True, help="Workflow run id")
+    workflow_approve.add_argument("--step-id", required=True, help="Approval step id")
+    workflow_approve.add_argument("--reason", default="approval granted", help="Decision reason recorded in the CLI output")
+    workflow_approve.add_argument("--json", action="store_true", dest="as_json", help="Emit machine-readable JSON")
+
+    workflow_reject = workflow_subcommands.add_parser("reject", help="Reject a waiting workflow approval step")
+    workflow_reject.add_argument("--workflow-store", required=True, help="Path to a ForgeWeave workflow SQLite store")
+    workflow_reject.add_argument("--run-id", required=True, help="Workflow run id")
+    workflow_reject.add_argument("--step-id", required=True, help="Approval step id")
+    workflow_reject.add_argument("--reason", default="approval rejected", help="Decision reason recorded in the CLI output")
+    workflow_reject.add_argument("--json", action="store_true", dest="as_json", help="Emit machine-readable JSON")
+
+    workflow_cancel_approval = workflow_subcommands.add_parser("cancel-approval", help="Cancel a waiting workflow approval step")
+    workflow_cancel_approval.add_argument("--workflow-store", required=True, help="Path to a ForgeWeave workflow SQLite store")
+    workflow_cancel_approval.add_argument("--run-id", required=True, help="Workflow run id")
+    workflow_cancel_approval.add_argument("--step-id", required=True, help="Approval step id")
+    workflow_cancel_approval.add_argument("--reason", default="approval cancelled", help="Decision reason recorded in the CLI output")
+    workflow_cancel_approval.add_argument("--json", action="store_true", dest="as_json", help="Emit machine-readable JSON")
 
     workflow_template = workflow_subcommands.add_parser("template", help="Inspect built-in workflow templates")
     workflow_template_subcommands = workflow_template.add_subparsers(dest="workflow_template_command", required=True)
@@ -210,9 +267,15 @@ def _build_parser() -> argparse.ArgumentParser:
     workflow_tick = workflow_subcommands.add_parser("tick", help="Run one safe workflow scheduler tick")
     workflow_tick.add_argument("--workflow-store", required=True, help="Path to a ForgeWeave workflow SQLite store")
     workflow_tick.add_argument("--run-id", required=True, help="Workflow run id to advance")
+    workflow_tick.add_argument("--worker-id", help="Durable worker id recorded on step attempts created by this tick")
+    workflow_tick.add_argument("--expected-definition-hash", help="Require the run to still match this admitted definition hash")
+    workflow_tick.add_argument("--expected-input-hash", help="Require the run to still match this admitted input hash")
     workflow_tick.add_argument("--max-ready-steps", type=int, help="Maximum ready steps to record in this tick")
     workflow_tick.add_argument("--enable-native-agent-executor", action="store_true", help="Run agent steps through the native-loop executor")
     workflow_tick.add_argument("--enable-tool-executor", action="store_true", help="Run tool steps through the policy-mediated tool executor")
+    workflow_tick.add_argument("--enable-verification-executor", action="store_true", help="Run verification steps through selected repository verification")
+    workflow_tick.add_argument("--verification-output-dir", help="Directory for verification output artifacts")
+    workflow_tick.add_argument("--verification-timeout-seconds", type=int, default=60, help="Timeout seconds for workflow verification steps")
     workflow_tick.add_argument("--fake-response", help="Deterministic native-agent text response for executor-enabled ticks")
     workflow_tick.add_argument("--fake-tool-call", help="Deterministic native-agent tool-call JSON for executor-enabled ticks")
     workflow_tick.add_argument("--repo-root", help="Repository root for workflow tool execution")
@@ -232,6 +295,18 @@ def _dispatch(args: argparse.Namespace) -> str:
         slash_command = parse_slash_command(prompt)
         if slash_command is not None:
             return render_slash_command(slash_command, as_json=args.as_json)
+        if args.state_dir:
+            if not args.repo_root:
+                raise ValueError("--repo-root is required for durable tasks")
+            if args.provider != "fake":
+                raise ValueError("durable tasks currently support only the offline fake provider")
+            if args.dry_run or args.output_file or args.snapshot_dir or args.targets or args.config_hash:
+                raise ValueError("these options are not supported by durable tasks")
+            view = run_local_task(repo_root=Path(args.repo_root), state_dir=Path(args.state_dir), task_id=args.task_id,
+                prompt=prompt, allow_host_execution=args.allow_host_execution, mode=args.mode,
+                allowed_paths=tuple(args.allow_write), fake_tool_call=_run_fake_tool_call(args),
+                fake_response=args.fake_response, complete_report=args.complete_report, timeout_seconds=args.timeout_seconds)
+            return json.dumps(view, sort_keys=True)
         view = run_native_once(
             NativeRunConfig(
                 prompt=prompt,
@@ -261,6 +336,8 @@ def _dispatch(args: argparse.Namespace) -> str:
             _write_output_file(Path(args.output_file), rendered)
             return ""
         return rendered
+    if args.command == "task" and args.task_command == "inspect":
+        return json.dumps(inspect_local_task(state_dir=Path(args.state_dir), task_id=args.task_id), sort_keys=True)
     if args.command == "config" and args.config_command == "show":
         return render_config(current_config_view(), as_json=args.as_json)
     if args.command == "verify" and args.verify_command == "run-selected":
@@ -331,8 +408,41 @@ def _dispatch(args: argparse.Namespace) -> str:
         )
         return render_workflow_run_admission(view, as_json=args.as_json)
     if args.command == "workflow" and args.workflow_command == "resume":
-        view = resume_workflow_run_from_store(Path(args.workflow_store), run_id=args.run_id)
+        view = resume_workflow_run_from_store(
+            Path(args.workflow_store),
+            run_id=args.run_id,
+            expected_definition=validate_definition_for_resume(Path(args.definition_file)) if args.definition_file else None,
+            expected_inputs=workflow_inputs_from_json(args.input_json, Path(args.input_file) if args.input_file else None)
+            if args.input_json is not None or args.input_file is not None
+            else None,
+        )
         return render_workflow_run_admission(view, as_json=args.as_json)
+    if args.command == "workflow" and args.workflow_command == "cancel":
+        view = cancel_workflow_run_from_store(
+            Path(args.workflow_store),
+            run_id=args.run_id,
+            reason=args.reason,
+            max_attempts=args.max_attempts,
+        )
+        return render_workflow_cancellation(view, as_json=args.as_json)
+    if args.command == "workflow" and args.workflow_command == "recover":
+        view = recover_workflow_run_from_store(
+            Path(args.workflow_store),
+            run_id=args.run_id,
+            max_attempts=args.max_attempts,
+            inspect_only=args.inspect_only,
+        )
+        return render_workflow_recovery(view, as_json=args.as_json)
+    if args.command == "workflow" and args.workflow_command in {"approve", "reject", "cancel-approval"}:
+        action = "cancel" if args.workflow_command == "cancel-approval" else args.workflow_command
+        view = workflow_approval_decision_from_store(
+            Path(args.workflow_store),
+            run_id=args.run_id,
+            step_id=args.step_id,
+            action=action,
+            reason=args.reason,
+        )
+        return render_workflow_approval_decision(view, as_json=args.as_json)
     if args.command == "workflow" and args.workflow_command == "template":
         if args.workflow_template_command == "list":
             return render_workflow_template_list(workflow_template_list_view(), as_json=args.as_json)
@@ -342,12 +452,23 @@ def _dispatch(args: argparse.Namespace) -> str:
         executors = workflow_executors_for_cli_tick(
             enable_native_agent=args.enable_native_agent_executor,
             enable_tool=args.enable_tool_executor,
+            enable_verification=args.enable_verification_executor,
             fake_response=args.fake_response,
             fake_tool_call=args.fake_tool_call,
             repo_root=Path(args.repo_root) if args.repo_root else None,
+            verification_output_dir=Path(args.verification_output_dir) if args.verification_output_dir else None,
+            verification_timeout_seconds=args.verification_timeout_seconds,
             dry_run=args.dry_run,
         )
-        view = workflow_tick_from_store(Path(args.workflow_store), run_id=args.run_id, max_ready_steps=args.max_ready_steps, executors=executors)
+        view = workflow_tick_from_store(
+            Path(args.workflow_store),
+            run_id=args.run_id,
+            max_ready_steps=args.max_ready_steps,
+            executors=executors,
+            worker_id=args.worker_id,
+            expected_definition_hash=args.expected_definition_hash,
+            expected_input_hash=args.expected_input_hash,
+        )
         return render_workflow_tick(view, as_json=args.as_json)
     if args.command == "workflow" and args.workflow_command == "status":
         view = workflow_status_from_store(Path(args.workflow_store), run_id=args.run_id)
