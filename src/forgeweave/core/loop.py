@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from hashlib import sha256
 import json
 from typing import TYPE_CHECKING, Any, Callable, Iterable, Protocol
 
-from forgeweave.contracts import BudgetReservation, PolicyDecision, PolicyOutcome
+from forgeweave.contracts import BudgetReservation, PolicyDecision, PolicyOutcome, ToolFailure, ToolResult
 from forgeweave.core.control import CancellationToken
 from forgeweave.core.diagnostics import LoopDiagnostics
 from forgeweave.core.repair import RepairLoopController, RepairOrchestrator, RepairRunResult
@@ -54,6 +55,25 @@ class LoopEventRecorderProtocol(Protocol):
         diagnostics_ref: str,
     ) -> object:
         """Persist a loop-end event."""
+
+
+class ToolExecutionRecorderProtocol(Protocol):
+    """Durable append-before-dispatch boundary for one tool execution."""
+
+    def record_requested(self, *, task_id: str, attempt_id: str, call: Any) -> object:
+        """Persist a validated tool request before policy evaluation."""
+
+    def record_policy_decision(self, decision: PolicyDecision) -> object:
+        """Persist the decision before an authorized call dispatches."""
+
+    def mark_dispatching(self, execution_id: str) -> object:
+        """Persist the dispatch boundary before invoking the handler."""
+
+    def record_result(self, result: ToolResult) -> object:
+        """Persist the successful terminal observation."""
+
+    def record_failure(self, failure: ToolFailure) -> object:
+        """Persist the failed terminal observation."""
 
 
 class StreamProtocolError(ValueError):
@@ -180,6 +200,8 @@ class NativeAgentLoop:
         on_model_turn_complete: Callable[[], None] | None = None,
         diagnostics: LoopDiagnostics | None = None,
         event_recorder: LoopEventRecorderProtocol | None = None,
+        tool_execution_recorder: ToolExecutionRecorderProtocol | None = None,
+        before_dispatch: Callable[[Any], None] | None = None,
         diagnostics_ref: str | None = None,
         verified_executor: Any | None = None,
     ) -> None:
@@ -197,6 +219,8 @@ class NativeAgentLoop:
         self._on_model_turn_complete = on_model_turn_complete
         self._diagnostics = diagnostics
         self._event_recorder = event_recorder
+        self._tool_execution_recorder = tool_execution_recorder
+        self._before_dispatch = before_dispatch
         self._diagnostics_ref = diagnostics_ref
         self._verified_executor = verified_executor
         if self._event_recorder is not None and (self._diagnostics_ref is None or not self._diagnostics_ref.strip()):
@@ -280,6 +304,12 @@ class NativeAgentLoop:
                     tool_schema_version=request.tool_schema_version,
                     arguments=request.arguments,
                 )
+                if self._tool_execution_recorder is not None:
+                    self._tool_execution_recorder.record_requested(
+                        task_id=self._task_id,
+                        attempt_id=self._attempt_id,
+                        call=call,
+                    )
                 decision = self._policy.authorize(
                     task_id=self._task_id,
                     attempt_id=self._attempt_id,
@@ -288,6 +318,8 @@ class NativeAgentLoop:
                     catalog_version=self._registry.catalog_version,
                 )
                 decisions.append(decision)
+                if self._tool_execution_recorder is not None:
+                    self._tool_execution_recorder.record_policy_decision(decision)
                 self._record(
                     "tool.policy.decided",
                     {
@@ -427,7 +459,13 @@ class NativeAgentLoop:
     def _dispatch_job(self, job: DispatchJob) -> dict[str, Any]:
         self._record("tool.dispatch.started", {"tool_name": job.tool_name, "tool_index": job.index})
         call = job.payload["call"]
+        crossed_dispatch_boundary = False
         try:
+            if self._before_dispatch is not None:
+                self._before_dispatch(call)
+            if self._tool_execution_recorder is not None:
+                self._tool_execution_recorder.mark_dispatching(call.call_id)
+                crossed_dispatch_boundary = True
             if self._verified_executor is None:
                 output = self._registry.dispatch(call)
                 observation = {"tool_name": job.tool_name, "output": output}
@@ -435,11 +473,30 @@ class NativeAgentLoop:
                 verified = self._verified_executor.run(call=call, dispatch=lambda: self._registry.dispatch(call))
                 observation = _verified_observation(tool_name=job.tool_name, output=verified.output, decision=verified.gate_decision)
         except Exception as exc:
+            if self._tool_execution_recorder is not None and crossed_dispatch_boundary:
+                self._tool_execution_recorder.record_failure(
+                    ToolFailure(
+                        call_id=call.call_id,
+                        error_type=type(exc).__name__,
+                        message=_bounded_error_message(exc),
+                        retryable=False,
+                    )
+                )
             self._record(
                 "tool.dispatch.ended",
                 {"tool_name": job.tool_name, "tool_index": job.index, "status": "error", "error_type": type(exc).__name__},
             )
             raise
+        # A publication failure after a successful handler must leave the
+        # dispatch in-flight for recovery, not misclassify the effect as failed.
+        if self._tool_execution_recorder is not None:
+            self._tool_execution_recorder.record_result(
+                ToolResult(
+                    call_id=call.call_id,
+                    output_ref=f"tool-output://{call.call_id}",
+                    output_hash=_output_hash(observation["output"]),
+                )
+            )
         status = "blocked" if observation.get("verification_blocked") else "ok"
         self._record("tool.dispatch.ended", {"tool_name": job.tool_name, "tool_index": job.index, "status": status})
         return observation
@@ -482,3 +539,19 @@ def _usage_tokens(usage: dict[str, int] | None) -> int | None:
     if usage is None:
         return None
     return sum(value for value in usage.values() if isinstance(value, int))
+
+
+def _output_hash(output: Any) -> str:
+    """Return a deterministic digest without putting tool output into event metadata."""
+
+    try:
+        serialized = json.dumps(output, sort_keys=True, default=repr, separators=(",", ":"))
+    except (TypeError, ValueError):
+        serialized = repr(output)
+    return "sha256:" + sha256(serialized.encode("utf-8", errors="replace")).hexdigest()
+
+
+def _bounded_error_message(exc: Exception) -> str:
+    """Keep durable failure metadata useful without retaining unbounded tool output."""
+
+    return str(exc)[:512] or type(exc).__name__
