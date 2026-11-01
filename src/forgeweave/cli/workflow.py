@@ -11,20 +11,31 @@ from typing import Any
 from forgeweave.automation import (
     NativeAgentWorkflowExecutorConfig,
     ToolWorkflowExecutorConfig,
+    VerificationWorkflowExecutorConfig,
+    WorkflowApprovalResult,
+    WorkflowCancellationResult,
     WorkflowExecutorRegistry,
     JoinMode,
     JoinPolicy,
     WorkflowDefinition,
     WorkflowFailurePolicy,
     WorkflowRun,
+    WorkflowRecoveryResult,
     WorkflowRunnerResult,
     WorkflowRunStatus,
     WorkflowStatusView,
     WorkflowStep,
     WorkflowStepKind,
     WorkflowStore,
+    approve_workflow_step,
+    cancel_workflow_run,
+    cancel_workflow_step_approval,
     register_native_agent_workflow_executor,
     register_tool_workflow_executor,
+    register_verification_workflow_executor,
+    reject_workflow_step,
+    recover_workflow_after_restart,
+    require_run_bindings,
     WorkflowTemplate,
     get_workflow_template,
     list_workflow_templates,
@@ -37,6 +48,30 @@ from forgeweave.cli.run import _registry as _build_cli_tool_registry
 from forgeweave.models import FakeModelProvider, ModelChunk
 from forgeweave.policy import PolicyGateway, PolicyRule
 from forgeweave.contracts import PolicyOutcome
+
+
+
+
+
+@dataclass(frozen=True)
+class WorkflowRecoveryView:
+    """CLI projection for workflow restart recovery."""
+
+    result: WorkflowRecoveryResult
+
+
+@dataclass(frozen=True)
+class WorkflowCancellationView:
+    """CLI projection for cancelling a workflow run."""
+
+    result: WorkflowCancellationResult
+
+
+@dataclass(frozen=True)
+class WorkflowApprovalDecisionView:
+    """CLI projection for an approval decision applied to a workflow run."""
+
+    result: WorkflowApprovalResult
 
 
 @dataclass(frozen=True)
@@ -112,6 +147,13 @@ class WorkflowRunAdmissionView:
     run: WorkflowRunSummary
     admitted: bool
     definition: WorkflowDefinitionSummary
+
+
+
+def validate_definition_for_resume(path: Path) -> WorkflowDefinition:
+    """Load a workflow definition used as a resume binding precondition."""
+
+    return _load_definition_file(path)
 
 
 def validate_workflow_definition_file(path: Path) -> WorkflowValidationView:
@@ -238,11 +280,25 @@ def admit_workflow_run_from_file(
     )
 
 
-def resume_workflow_run_from_store(store_path: Path, *, run_id: str) -> WorkflowRunAdmissionView:
+def resume_workflow_run_from_store(
+    store_path: Path,
+    *,
+    run_id: str,
+    expected_definition: WorkflowDefinition | None = None,
+    expected_inputs: dict[str, Any] | None = None,
+) -> WorkflowRunAdmissionView:
     """Move a persisted paused/failed workflow run back to pending for a future runner."""
 
+    expected_definition_hash = expected_definition.definition_hash if expected_definition is not None else None
+    expected_input_hash = workflow_input_hash(expected_inputs) if expected_inputs is not None else None
     store = WorkflowStore.open(store_path)
     try:
+        require_run_bindings(
+            store,
+            run_id=run_id,
+            expected_definition_hash=expected_definition_hash,
+            expected_input_hash=expected_input_hash,
+        )
         current = store.get_run(run_id)
         if current.status not in {
             WorkflowRunStatus.FAILED,
@@ -297,18 +353,178 @@ def render_workflow_run_admission(view: WorkflowRunAdmissionView, *, as_json: bo
     )
 
 
+
+
+
+def recover_workflow_run_from_store(
+    store_path: Path,
+    *,
+    run_id: str,
+    max_attempts: int,
+    inspect_only: bool = False,
+) -> WorkflowRecoveryView:
+    """Reconcile in-flight workflow attempts after restart."""
+
+    store = WorkflowStore.open(store_path)
+    try:
+        result = recover_workflow_after_restart(
+            store,
+            run_id=run_id,
+            max_attempts=max_attempts,
+            mark_waiting_external=not inspect_only,
+        )
+    finally:
+        store.close()
+    return WorkflowRecoveryView(result=result)
+
+
+def render_workflow_recovery(view: WorkflowRecoveryView, *, as_json: bool = False) -> str:
+    """Render workflow restart recovery."""
+
+    result = view.result
+    payload = {
+        "run_id": result.run_id,
+        "run_status": result.run_status.value,
+        "attentions": [
+            {
+                "attempt_id": item.attempt_id,
+                "step_id": item.step_id,
+                "previous_status": item.previous_status.value,
+                "recovered_status": item.recovered_status.value,
+                "reason": item.reason,
+            }
+            for item in result.attentions
+        ],
+    }
+    if as_json:
+        return json.dumps(payload, indent=2, sort_keys=True)
+    lines = [
+        f"Workflow recovery: {result.run_id}",
+        f"Run status: {result.run_status.value}",
+        "Attempts needing attention:",
+    ]
+    if result.attentions:
+        lines.extend(f"  - {item.attempt_id}: {item.previous_status.value} -> {item.recovered_status.value} ({item.reason})" for item in result.attentions)
+    else:
+        lines.append("  none")
+    return "\n".join(lines)
+
+
+def cancel_workflow_run_from_store(
+    store_path: Path,
+    *,
+    run_id: str,
+    reason: str,
+    max_attempts: int,
+) -> WorkflowCancellationView:
+    """Cancel one persisted workflow run within a bounded attempt count."""
+
+    store = WorkflowStore.open(store_path)
+    try:
+        result = cancel_workflow_run(store, run_id=run_id, reason=reason, max_attempts=max_attempts)
+    finally:
+        store.close()
+    return WorkflowCancellationView(result=result)
+
+
+def render_workflow_cancellation(view: WorkflowCancellationView, *, as_json: bool = False) -> str:
+    """Render workflow cancellation."""
+
+    result = view.result
+    payload = {
+        "run_id": result.run_id,
+        "run_status": result.run_status.value,
+        "cancelled_attempt_ids": list(result.cancelled_attempt_ids),
+        "reason": result.reason,
+    }
+    if as_json:
+        return json.dumps(payload, indent=2, sort_keys=True)
+    lines = [
+        f"Workflow run cancelled: {result.run_id}",
+        f"Run status: {result.run_status.value}",
+        f"Reason: {result.reason}",
+        "Cancelled attempts:",
+    ]
+    if result.cancelled_attempt_ids:
+        lines.extend(f"  - {attempt_id}" for attempt_id in result.cancelled_attempt_ids)
+    else:
+        lines.append("  none")
+    return "\n".join(lines)
+
+
+def workflow_approval_decision_from_store(
+    store_path: Path,
+    *,
+    run_id: str,
+    step_id: str,
+    action: str,
+    reason: str,
+) -> WorkflowApprovalDecisionView:
+    """Apply one approval decision to a persisted workflow run."""
+
+    store = WorkflowStore.open(store_path)
+    try:
+        if action == "approve":
+            result = approve_workflow_step(store, run_id=run_id, step_id=step_id, reason=reason)
+        elif action == "reject":
+            result = reject_workflow_step(store, run_id=run_id, step_id=step_id, reason=reason)
+        elif action == "cancel":
+            result = cancel_workflow_step_approval(store, run_id=run_id, step_id=step_id, reason=reason)
+        else:
+            raise ValueError(f"unknown workflow approval action: {action}")
+    finally:
+        store.close()
+    return WorkflowApprovalDecisionView(result=result)
+
+
+def render_workflow_approval_decision(view: WorkflowApprovalDecisionView, *, as_json: bool = False) -> str:
+    """Render one workflow approval decision."""
+
+    result = view.result
+    payload = {
+        "run_id": result.run_id,
+        "step_id": result.step_id,
+        "attempt_id": result.attempt_id,
+        "action": result.action,
+        "step_status": result.step_status.value,
+        "run_status": result.run_status.value,
+        "reason": result.reason,
+    }
+    if as_json:
+        return json.dumps(payload, indent=2, sort_keys=True)
+    return "\n".join(
+        (
+            f"Workflow approval {result.action}: {result.run_id}",
+            f"Step: {result.step_id}",
+            f"Attempt: {result.attempt_id}",
+            f"Step status: {result.step_status.value}",
+            f"Run status: {result.run_status.value}",
+            f"Reason: {result.reason}",
+        )
+    )
+
+
 def workflow_tick_from_store(
     store_path: Path,
     *,
     run_id: str,
     max_ready_steps: int | None = None,
     executors: WorkflowExecutorRegistry | None = None,
+    worker_id: str | None = None,
+    expected_definition_hash: str | None = None,
+    expected_input_hash: str | None = None,
 ) -> WorkflowRunnerResult:
     """Run one workflow scheduler tick over a persisted run."""
 
     store = WorkflowStore.open(store_path)
     try:
-        return run_workflow_once(store, run_id=run_id, max_ready_steps=max_ready_steps, executors=executors)
+        require_run_bindings(
+            store,
+            run_id=run_id,
+            expected_definition_hash=expected_definition_hash,
+            expected_input_hash=expected_input_hash,
+        )
+        return run_workflow_once(store, run_id=run_id, max_ready_steps=max_ready_steps, executors=executors, worker_id=worker_id)
     finally:
         store.close()
 
@@ -317,14 +533,17 @@ def workflow_executors_for_cli_tick(
     *,
     enable_native_agent: bool = False,
     enable_tool: bool = False,
+    enable_verification: bool = False,
     fake_response: str | None = None,
     fake_tool_call: str | None = None,
     repo_root: Path | None = None,
+    verification_output_dir: Path | None = None,
+    verification_timeout_seconds: int = 60,
     dry_run: bool = False,
 ) -> WorkflowExecutorRegistry | None:
     """Build opt-in workflow executors for a CLI tick."""
 
-    if not enable_native_agent and not enable_tool:
+    if not enable_native_agent and not enable_tool and not enable_verification:
         return None
     if fake_response is not None and fake_tool_call is not None:
         raise ValueError("use either --fake-response or --fake-tool-call, not both")
@@ -352,6 +571,17 @@ def workflow_executors_for_cli_tick(
                 registry=tool_registry,
                 policy=policy,
                 workspace_precondition_hash="sha256:workflow-cli",
+                task_id="workflow-cli",
+            ),
+        )
+    if enable_verification:
+        root = (repo_root or Path.cwd()).resolve()
+        register_verification_workflow_executor(
+            registry,
+            VerificationWorkflowExecutorConfig(
+                repo_root=root,
+                output_dir=(verification_output_dir or (root / ".forgeweave" / "verification")).resolve(),
+                timeout_seconds=verification_timeout_seconds,
                 task_id="workflow-cli",
             ),
         )
