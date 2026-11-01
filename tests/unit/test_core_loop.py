@@ -7,9 +7,9 @@ import unittest
 
 from forgeweave.context import ContextModelInput
 from forgeweave.context.assembler import ContextPacket
-from forgeweave.contracts import BudgetLedger, BudgetReservation, ContextManifest, ContextSpan, EffectSet, EventKind, ToolSpec, VerificationRun
+from forgeweave.contracts import BudgetLedger, BudgetReservation, ContextManifest, ContextSpan, EffectSet, EventKind, ToolExecutionState, ToolSpec, VerificationRun
 from forgeweave.core import BudgetLimits, BudgetUsage, CancellationToken, LoopDiagnostics, NativeAgentLoop, StopReason
-from forgeweave.events import EventStore, LoopEventRecorder
+from forgeweave.events import EventStore, LoopEventRecorder, ToolExecutionRecorder
 from forgeweave.models import FakeModelProvider, ModelChunk
 from forgeweave.policy import PolicyGateway, PolicyRule
 from forgeweave.telemetry import BoundedTelemetryWriter, JsonlTelemetrySink
@@ -62,6 +62,114 @@ class RecordingProvider(FakeModelProvider):
 
 
 class CoreLoopTests(unittest.TestCase):
+
+    def test_loop_persists_tool_execution_around_real_workspace_write(self) -> None:
+        """The event log crosses the dispatch boundary before a write occurs."""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            store = EventStore.open(root / "events.db")
+            try:
+                registry = ToolRegistry(catalog_version="tools-v1")
+                target = root / "written.txt"
+                registry.register(
+                    ToolSpec(
+                        name="write_text",
+                        description="Write a controlled test file.",
+                        input_schema={
+                            "type": "object",
+                            "required": ["content"],
+                            "properties": {"content": {"type": "string"}},
+                        },
+                        effects=EffectSet(writes=frozenset({"workspace"})),
+                        schema_version="write-text.v1",
+                    ),
+                    lambda arguments: target.write_text(arguments["content"], encoding="utf-8") or str(target),
+                )
+                loop = NativeAgentLoop(
+                    provider=FakeModelProvider(
+                        [
+                            ModelChunk(
+                                kind="tool_call",
+                                call_id="model-call-1",
+                                content='{"tool_name":"write_text","tool_schema_version":"write-text.v1","arguments":{"content":"persisted"}}',
+                            ),
+                            ModelChunk(kind="done"),
+                        ]
+                    ),
+                    registry=registry,
+                    policy=PolicyGateway(
+                        policy_revision="policy-v1",
+                        rules=(PolicyRule(tool_name="write_text", outcome=PolicyOutcome.ALLOW, reason="test write"),),
+                    ),
+                    task_id="task-1",
+                    attempt_id="attempt-1",
+                    workspace_precondition_hash="sha256:workspace",
+                    tool_execution_recorder=ToolExecutionRecorder(store),
+                )
+
+                result = loop.run_once(messages=[{"role": "user", "content": "write"}])
+
+                self.assertEqual(target.read_text(encoding="utf-8"), "persisted")
+                self.assertEqual(result.observations[0]["tool_name"], "write_text")
+                events = store.list_events("task-1")
+                self.assertEqual(
+                    [event.kind for event in events],
+                    [EventKind.TOOL_CALL_REQUESTED, EventKind.POLICY_DECISION, EventKind.TOOL_RESULT],
+                )
+                execution = store.list_tool_executions()[0]
+                self.assertEqual(execution.state, ToolExecutionState.SUCCEEDED)
+                self.assertEqual(execution.tool_name, "write_text")
+            finally:
+                store.close()
+
+    def test_loop_records_terminal_tool_failure_after_dispatch(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = EventStore.open(Path(tmp) / "events.db")
+            try:
+                registry = ToolRegistry(catalog_version="tools-v1")
+                registry.register(
+                    ToolSpec(
+                        name="failing_write",
+                        description="Fail after the durable dispatch boundary.",
+                        input_schema={"type": "object", "properties": {}},
+                        effects=EffectSet(writes=frozenset({"workspace"})),
+                        schema_version="failing-write.v1",
+                    ),
+                    lambda _arguments: (_ for _ in ()).throw(RuntimeError("controlled failure")),
+                )
+                loop = NativeAgentLoop(
+                    provider=FakeModelProvider(
+                        [
+                            ModelChunk(
+                                kind="tool_call",
+                                call_id="model-call-1",
+                                content='{"tool_name":"failing_write","tool_schema_version":"failing-write.v1","arguments":{}}',
+                            ),
+                            ModelChunk(kind="done"),
+                        ]
+                    ),
+                    registry=registry,
+                    policy=PolicyGateway(
+                        policy_revision="policy-v1",
+                        rules=(PolicyRule(tool_name="failing_write", outcome=PolicyOutcome.ALLOW, reason="test write"),),
+                    ),
+                    task_id="task-1",
+                    attempt_id="attempt-1",
+                    workspace_precondition_hash="sha256:workspace",
+                    tool_execution_recorder=ToolExecutionRecorder(store),
+                )
+
+                with self.assertRaisesRegex(RuntimeError, "controlled failure"):
+                    loop.run_once(messages=[{"role": "user", "content": "write"}])
+
+                self.assertEqual(
+                    [event.kind for event in store.list_events("task-1")],
+                    [EventKind.TOOL_CALL_REQUESTED, EventKind.POLICY_DECISION, EventKind.TOOL_FAILURE],
+                )
+                self.assertEqual(store.list_tool_executions()[0].state, ToolExecutionState.FAILED)
+            finally:
+                store.close()
 
     def test_loop_passes_registered_tool_catalog_to_provider(self) -> None:
         provider = RecordingProvider([ModelChunk(kind="text", content="done"), ModelChunk(kind="done")])
