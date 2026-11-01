@@ -8,6 +8,7 @@ from pathlib import Path
 import sqlite3
 from typing import Any
 
+from .artifacts import WorkflowArtifactRecord
 from .contracts import StepAttempt, WorkflowDefinition, WorkflowFailurePolicy, WorkflowRun, WorkflowRunStatus, WorkflowStepStatus
 
 
@@ -66,6 +67,20 @@ class WorkflowStore:
                 status TEXT NOT NULL,
                 attempt_json TEXT NOT NULL,
                 UNIQUE(run_id, idempotency_key)
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS workflow_artifacts (
+                artifact_id TEXT PRIMARY KEY,
+                run_id TEXT NOT NULL,
+                step_id TEXT NOT NULL,
+                attempt_id TEXT NOT NULL,
+                name TEXT NOT NULL,
+                uri TEXT NOT NULL,
+                artifact_json TEXT NOT NULL,
+                UNIQUE(attempt_id, name)
             )
             """
         )
@@ -214,6 +229,7 @@ class WorkflowStore:
             step_id=attempt.step_id,
             idempotency_key=attempt.idempotency_key,
             lease_token=attempt.lease_token,
+            worker_id=attempt.worker_id,
             status=status,
         )
         with self._connection:
@@ -240,6 +256,55 @@ class WorkflowStore:
         ).fetchall()
         return tuple(_attempt_from_json(str(row[0])) for row in rows)
 
+
+
+    def record_artifact(self, artifact: WorkflowArtifactRecord) -> WorkflowArtifactRecord:
+        """Persist workflow artifact provenance idempotently by attempt/name."""
+
+        self.get_attempt(artifact.attempt_id)
+        payload = _artifact_to_json(artifact)
+        existing = self._connection.execute(
+            "SELECT artifact_json FROM workflow_artifacts WHERE attempt_id = ? AND name = ?",
+            (artifact.attempt_id, artifact.name),
+        ).fetchone()
+        if existing is not None:
+            stored = _artifact_from_json(str(existing[0]))
+            if stored != artifact:
+                raise WorkflowStoreError("ARTIFACT_CONFLICT", "artifact binding already exists with different provenance")
+            return stored
+        with self._connection:
+            self._connection.execute(
+                """
+                INSERT INTO workflow_artifacts(artifact_id, run_id, step_id, attempt_id, name, uri, artifact_json)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (artifact.artifact_id, artifact.run_id, artifact.step_id, artifact.attempt_id, artifact.name, artifact.uri, payload),
+            )
+        return artifact
+
+    def list_artifacts(self, *, run_id: str | None = None, attempt_id: str | None = None) -> tuple[WorkflowArtifactRecord, ...]:
+        """Return persisted workflow artifact provenance records."""
+
+        if run_id is not None and attempt_id is not None:
+            rows = self._connection.execute(
+                "SELECT artifact_json FROM workflow_artifacts WHERE run_id = ? AND attempt_id = ? ORDER BY step_id, name, artifact_id",
+                (run_id, attempt_id),
+            ).fetchall()
+        elif run_id is not None:
+            rows = self._connection.execute(
+                "SELECT artifact_json FROM workflow_artifacts WHERE run_id = ? ORDER BY step_id, name, artifact_id",
+                (run_id,),
+            ).fetchall()
+        elif attempt_id is not None:
+            rows = self._connection.execute(
+                "SELECT artifact_json FROM workflow_artifacts WHERE attempt_id = ? ORDER BY step_id, name, artifact_id",
+                (attempt_id,),
+            ).fetchall()
+        else:
+            rows = self._connection.execute(
+                "SELECT artifact_json FROM workflow_artifacts ORDER BY run_id, step_id, name, artifact_id"
+            ).fetchall()
+        return tuple(_artifact_from_json(str(row[0])) for row in rows)
 
 def _definition_to_json(definition: WorkflowDefinition) -> str:
     return json.dumps(_definition_payload(definition), sort_keys=True)
@@ -313,5 +378,23 @@ def _attempt_from_json(text: str) -> StepAttempt:
         step_id=payload["step_id"],
         idempotency_key=payload["idempotency_key"],
         lease_token=payload.get("lease_token"),
+        worker_id=payload.get("worker_id"),
         status=WorkflowStepStatus(payload["status"]),
+    )
+
+
+def _artifact_to_json(artifact: WorkflowArtifactRecord) -> str:
+    return json.dumps(asdict(artifact), sort_keys=True)
+
+
+def _artifact_from_json(text: str) -> WorkflowArtifactRecord:
+    payload = json.loads(text)
+    return WorkflowArtifactRecord(
+        artifact_id=payload["artifact_id"],
+        run_id=payload["run_id"],
+        step_id=payload["step_id"],
+        attempt_id=payload["attempt_id"],
+        name=payload["name"],
+        uri=payload["uri"],
+        metadata=payload.get("metadata"),
     )
