@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+import json
 from hashlib import sha256
 from pathlib import Path
 
@@ -59,6 +60,8 @@ class EventStore:
             )
             """
         )
+        connection.execute("CREATE TABLE IF NOT EXISTS event_payloads (digest TEXT PRIMARY KEY, payload TEXT NOT NULL)")
+        connection.execute("CREATE TABLE IF NOT EXISTS task_admissions (task_id TEXT PRIMARY KEY)")
         connection.commit()
         return cls(connection)
 
@@ -70,6 +73,34 @@ class EventStore:
         """Return SQLite's effective journal mode for diagnostics/tests."""
 
         return str(self._connection.execute("PRAGMA journal_mode").fetchone()[0])
+
+    def put_payload(self, payload: dict) -> str:
+        """Persist a content-addressed JSON payload for an event reference."""
+        value = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+        digest = sha256(value.encode("utf-8")).hexdigest()
+        with self._connection:
+            self._connection.execute("INSERT OR IGNORE INTO event_payloads VALUES (?, ?)", (digest, value))
+        return f"payload://{digest}"
+
+    def claim_task(self, task_id: str) -> None:
+        """Atomically reserve a task ID; an interrupted admission stays reserved."""
+        try:
+            with self._connection:
+                if self._connection.execute("SELECT 1 FROM events WHERE task_id = ? LIMIT 1", (task_id,)).fetchone():
+                    raise ValueError(f"task already exists: {task_id}")
+                self._connection.execute("INSERT INTO task_admissions VALUES (?)", (task_id,))
+        except sqlite3.IntegrityError as exc:
+            raise ValueError(f"task already exists: {task_id}") from exc
+
+    def read_payload(self, ref: str) -> dict:
+        """Read a retained JSON payload and verify its content identity."""
+        if not ref.startswith("payload://"):
+            raise ValueError("not a payload reference")
+        digest = ref.removeprefix("payload://")
+        row = self._connection.execute("SELECT payload FROM event_payloads WHERE digest = ?", (digest,)).fetchone()
+        if row is None or sha256(row[0].encode("utf-8")).hexdigest() != digest:
+            raise ValueError("payload missing or corrupt")
+        return json.loads(row[0])
 
     def append(self, event: Event) -> Event:
         """Append `event`, assigning the next sequence for its task.
