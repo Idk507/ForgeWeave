@@ -4,6 +4,8 @@ Execution guide derived from [AGENTS.md](./AGENTS.md) (implementation contract) 
 
 ## 1. Product in one paragraph
 
+Current authority: [ADR-004](docs/architecture/adr-004-independent-native-cli.md), [source review](docs/research/native-cli-source-review-2026-11-01.md) and SYSTEM_DESIGN section 16. Implement an independent native coding CLI; other agents are references. N1–N3 in todo.md close CLI composition, continuing feedback and protected verification/recovery before extension work. Existing M-series acceptance requirements remain; external-engine delivery is retired. Do not use file-by-file progress as a substitute for a working user flow.
+
 ForgeWeave is a model-independent, local-first **Python CLI coding agent**. Invariant: every authorized action, its originating context, the resulting change and its verification result stay inspectable and resumable from the CLI. The model proposes structured requests; the harness validates, authorizes and executes them. Editor, web UI, ACP, hosted service and cloud workers are out of scope for the first release.
 
 ## 2. Non-negotiable rules (apply to every task)
@@ -30,7 +32,6 @@ AGENTS.md milestones (M0-M6) and SYSTEM_DESIGN.md stages (0-6) differ in groupin
 | Topic | AGENTS.md | SYSTEM_DESIGN.md | Decision |
 |---|---|---|---|
 | Context assembler / session memory | M5 (memory) | Stage 2 | Context assembler, token budget, trim/rehydrate and session snapshots land in **M1/M2**; scoped long-term/episodic memory stays **M5**. |
-| Laya integration | Deferred | Future proposal | Deferred by ADR-001; preserve the interface notes, but do not implement or install it during the native-core delivery sequence. |
 | Skills, MCP, browser, subagents | M2-M3 | Stage 3 | Follow AGENTS (skills/MCP in M2, browser/subagents in M3). |
 | Ralph + automation | Ralph M5, automation M4 | Stage 5 together | Follow AGENTS: automation **M4**, Ralph **M5**. |
 | Long AGENTS.md | Feature inventory | "Keep as concise index" | After M0, shrink AGENTS.md into an index linking to SYSTEM_DESIGN.md and ADRs. |
@@ -50,84 +51,18 @@ AGENTS.md milestones (M0-M6) and SYSTEM_DESIGN.md stages (0-6) differ in groupin
 | MCP | Official MCP Python SDK | stdio first, then Streamable HTTP. |
 | Telemetry | OpenTelemetry API + local JSON exporter | No external service. |
 | Secrets | OS keyring; encrypted file or env fallback | Explicit opt-in for fallback. |
-| Routing (System 1) | Deterministic policy | Use explicit user choice and eligibility constraints; Laya is a deferred future proposal under ADR-001. |
 | Packaging | `pyproject.toml`, `uv` or `pip`, `pytest`, `ruff`, `mypy`/`pyright`, `import-linter` | Pin after implementation-time checks. |
-| Optional engine: DeepSeek Harness | `deepseek-harness-sdk` + `deepseek-harness-runtime-bin` (optional extra `forgeweave[engine-deepseek]`) | See section 4.1. Pre-release; pin exact version. |
-| Optional engine: OpenAI Codex | `openai-codex` (optional extra `forgeweave[engine-codex]`) | See section 4.1. Not the same as the `codex-harness` package. |
 | Optional verifier: Codex Harness | `codex-harness` (optional extra `forgeweave[quality-codex-harness]`) | See section 4.1. Third-party; native implementation is the default. |
 
 Dependency pinning rule: check current versions and licenses at implementation time; record in `docs/architecture/dependencies.md`.
 
 Research on 2026-10-04 observed `openai-codex` 0.160.0, `ddgs` 9.16.0 and `browser-use` 0.13.10. These are observations, not upgraded pins. The repository still pins Codex 0.159.3. Reviewed upstream HEAD commits are not evidence that the current wheels contain identical implementations. See the source review for exact commits and package identity.
 
-### 4.1 Reusing DeepSeek Harness and Codex Harness packages
+### 4.1 Reference harnesses and inactive engine experiments
 
-Research retrieved 2026-10-01 (sources at the end of this section). Names matter because they are easy to confuse:
+[ADR-004](docs/architecture/adr-004-independent-native-cli.md) supersedes the earlier vendor-engine delivery proposal. ForgeWeave implements its own Python runtime. The [current source review](docs/research/native-cli-source-review-2026-11-01.md) records Codex, DeepSeek Harness, Claude Code, OpenCode and Reason findings and pinned revisions. The [2026-10-04 study](docs/research/harness-source-review-2026-10-04.md) retains historical package evidence.
 
-| PyPI package | What it actually is | License / Python / status | Platforms |
-|---|---|---|---|
-| `deepseek-harness-sdk` 0.1.5rc1 (released 2026-09-10) | Python subprocess client for DeepSeek Harness. Requires `deepseek-harness-runtime-bin==0.1.5rc1` and `pydantic>=2.12`. Launches the bundled `dsh` CLI with `--profile sdk` and talks newline-delimited JSON-RPC over stdio. `DeepSeekHarness(...).run(prompt, session_id=...)` returns `RunResult(session_id, final_response, finish_reason, events, notifications)`. No known vulnerabilities listed. | MIT / >=3.10 / **pre-release** | via runtime wheel |
-| `deepseek-harness-runtime-bin` 0.1.5rc1 | Wheels-only package bundling the TypeScript `dsh` runtime as a native executable (no system Node.js needed; `pnpm` only for `dsh plugin`). Requires non-empty `DSH_HOME`; never reads `~/.dsh`. | MIT / >=3.10 / pre-release | Linux x64/arm64, macOS arm64/x64, **Windows x64** (no Windows arm64) |
-| `deepseek-harness` (bare name) | **Verified via PyPI JSON API on 2026-10-01: unrelated third-party project** (owner CyberWizard / HenryZ838978, MIT, 0.3.1 released 2026-09-10, Python >=3.9). A protocol-aware client for DeepSeek V4-Pro/Flash that wraps `openai.OpenAI`, handles 16 documented API quirks and the cache discount. Not DeepSeek's official harness. **It exports the same import name `deepseek_harness.DeepSeekHarness` as the official SDK, so both must never be installed in one environment.** Do not depend on it; its published quirk report can inform our native DeepSeek `ModelProvider` adapter as a reference only. | MIT / >=3.9 | any |
-| `openai-codex` 0.159.3 (released 2026-09-30) | Official OpenAI Codex Python SDK (`Codex().thread_start().run(...)`), drives Codex threads/turns, streaming and workspace access control. Requires `pydantic>=2.12`, `packaging>=26.2` and the exactly-pinned `openai-codex-cli-bin==0.159.3` (bundled Codex CLI). Releases track the Codex CLI version, so expect frequent changes. Source: `openai/codex/sdk/python`. No known vulnerabilities listed. | Apache-2.0 / >=3.10 | needs Codex runtime/auth |
-| `codex-harness` 0.1.1 (released 2026-09-11) | **Not an agent loop and not OpenAI's.** Third-party (r-tatarinov) deterministic code-quality guardrail for Codex CLI: `PreToolUse`/`PostToolUse` hooks on `apply_patch`, baseline-vs-after regression policy over Ruff/Flake8/Pylint/Black/MyPy findings, per-turn retry budget. CLIs: `codex-harness-check`, `codex-harness-pre-tool`, `codex-harness-post-tool`. | Apache-2.0 / **>=3.12** (above our 3.11 floor) | any |
-
-**Decision (ADR-010, to record in M0):** neither package can be ForgeWeave's core. The invariant requires every action to pass ForgeWeave's own `PolicyGateway`, event log and worktree manager. DeepSeek Harness has its own Cordis plugin tree, session log, sandbox/approval policy and tools; Codex has its own app-server loop. Embedding either as the core would split audit and authority. Therefore:
-
-1. **ForgeWeave stays the harness.** The agent loop, event store, policy, workspace, context and memory are native Python (milestones M1-M5 unchanged).
-2. **Engines are optional backends behind a new `engines` package** (`DelegatedEngine` protocol: `start(task, workspace, policy_profile) -> EngineRun`, `stream_events()`, `cancel()`, `resume()`), selected with `--engine native|jsonrpc|appserver` (default `native`). Each engine run is one ForgeWeave task in one ForgeWeave worktree; engine events are imported as `EngineEvent` records marked **untrusted observations** and linked to the task's event log. ForgeWeave still runs its own independent verifier; an engine's "done" is never completion.
-3. **Two integration modes, with honest isolation labels:**
-   - `mediated` (preferred): the engine's native shell/filesystem tools are disabled via profile patch, and it can call only a ForgeWeave-served MCP tool endpoint, so every call is authorized by `PolicyGateway`. **Feasibility unverified**; M2 spike required (DeepSeek smoke tests show MCP support; Codex app-server MCP support to be verified).
-   - `delegated`: engine uses its native tools inside the task worktree. ForgeWeave cannot authorize individual calls, so the isolation level is reported as `delegated-unmediated`, the mode requires explicit user opt-in per task, no browser/MCP/network/publication effects are granted through it, and it must run with the least OS isolation available. DeepSeek `sdk-minimal` pins `danger-full-access` and does not confine paths to the workspace; treat it as unconfined, and use the sandboxed `sdk` profile instead (see 4.1.1).
-4. **DeepSeek models are reached natively** through ForgeWeave's own DeepSeek/OpenAI-compatible `ModelProvider` adapter (M2), not through `dsh`. The harness package is only for the engine path.
-5. **Privacy:** DeepSeek's `session-log-deepseek` plugin uploads unaccepted session log events with requests by default (up to 8 MiB). The engine adapter must ship a patch with `session-log-deepseek.enabled: false` unless repository policy allows it. Always use an explicit, task-scoped `dsh_home` (never `~/.dsh`), a fresh home per task unless resuming, and an explicit credential env var passed from the OS keyring.
-6. **Pre-release risk:** pin exact versions (`==0.1.5rc1`), vendor-neutral protocol tests, and CI smoke test on Windows x64. Failure or absence of an engine must never affect `native`.
-7. **`codex-harness` is not used as a runtime dependency by default.** Its hooks only guard Codex `apply_patch` (not shell edits), block subagents, require Python 3.12, and persist state/config under `~/.codex/harness`. Instead ForgeWeave adopts its **design** natively in `verify/regression` (see below), and offers it as an optional verifier plugin that shells out to `codex-harness-check` with an isolated `HOME`, only on Python 3.12+.
-
-Design ideas to adopt (re-implement; do not copy source):
-
-| Source | Idea | ForgeWeave home |
-|---|---|---|
-| codex-harness | Regression policy: evaluate the change, not legacy debt. Compare BEFORE/AFTER findings per file+analyzer+rule(+qualified function); numeric metrics worsen-only; ordinary diagnostics by occurrence count; debt in one file cannot offset another | `verify/regression.py` |
-| codex-harness | Analyzer adapter contract with normalized `Finding`; adapters own process invocation and parsing; Ruff, Flake8, Pylint, Black (check-only), MyPy | `verify/analyzers/*` |
-| codex-harness | Retry budget scoped by hash of (session, cwd, turn); PASS resets; N consecutive FAILs deny further edits before they change files | `verify` + `core` repair loop; scope key includes task/attempt |
-| codex-harness | Code failure vs infrastructure failure: analyzer crash/timeout/bad config **fail closed** without consuming the retry budget | `verify` |
-| codex-harness | Snapshot claimed atomically (rename) so duplicate/concurrent PostToolUse delivery is idempotent | `verify/snapshots`, aligns with idempotent events |
-| codex-harness limitation | Only `apply_patch` covered; shell edits bypass. ForgeWeave must diff the worktree (Git) after any mutating tool, not trust one tool | `verify` |
-| DeepSeek Harness | Everything is a plugin; registrations are reversible effects that unwind on unload (Cordis) | `plugins` registry with scoped registration + teardown |
-| DeepSeek Harness | Session log is the source of model context: "model-visible means logged"; requests must be reconstructable from the log | `sessions` + `context` invariant test |
-| DeepSeek Harness | Interception points: `agent/pre-step`, `agent/request`, `tools/pre-execute`, `tools/execute`, `tools/post-execute`, `agent/turn-stopping` | `hooks` event names and ordering |
-| DeepSeek Harness | Seams = Service Definition + Provider + Consumer; swapping filesystem/subprocess provider moves shell, PTY, LSP together; sandbox backend wraps argv | `tools`/`policy` seams; sandbox backend interface |
-| DeepSeek Harness | Profiles + bundles + ordered patch layers; `--dump-config` shows effective composition | `fw config show --effective`, agent/workflow layering |
-| DeepSeek Harness | Session migrations: never rewrite committed generation files; publish a successor; static adjacent `vN -> vN+1` chain | `events` migrations |
-| DeepSeek Harness | Failed steps record missing tool results; assistant stream settlements retained as attempts | `core` crash recovery |
-| DeepSeek SDK | Explicit home, never discover `~/` | ForgeWeave data dir is explicit and reported by `fw config show` |
-
-#### 4.1.1 Verified against primary documentation (2026-10-01) and implementation status
-
-Read from the vendors' own docs (no vendor package was installed or executed; installation was blocked as high-risk by tooling):
-
-- **DeepSeek `dsh` has the seams needed for confinement.** Capability seams include `ctx.sandbox` (`sandbox-local`, `sandbox-ssh`; `sandbox-windows-acl` for Windows), `ctx.sandboxPolicy`, `ctx.fs` with `fs-sandbox`, `ctx.shell` with `bash-sandbox`/`pwsh-local`, `ctx.approval` (absent answerer **fails closed**), `ctx.permissionPresets` (`workspace-write`, `danger-full-access`), an MCP client plugin (`mcp-client`), and its own `ctx.subagents`/`ctx.workflowEngine`/`tool-ralph`. The base-backed `sdk` profile confines file writes to the workspace plus a private per-session temp dir and asks before risky actions. `sdk-minimal` instead pins `danger-full-access`. **Decision:** the DeepSeek engine defaults to `profile="sdk"`, never `sdk-minimal`.
-- **Patch semantics:** a patch entry replaces the whole configuration of its target row (nothing merges); rows are identified by `id`; the shell stack must be switched coherently (disable both PowerShell rows and enable both bash rows); the plain filesystem provider must not be added beside the sandboxed one. The session-log upload patch therefore cannot be written blind; derive it from `dsh --profile sdk --dump-config` (spike M0.14a). Until a human attests the upload is disabled, the adapter refuses to run (`upload_disabled_attested=False` by default). The base profile also enables OTel session upload `FEEDBACK_ONLY` by default; set it `DISABLED`.
-- **Mediated mode, status: plausible but unproven.** Prerequisites exist (MCP client entries, patchable rows, fail-closed approval). Unknown until the spike: whether native shell/fs rows can be removed while keeping a working agent, and whether Windows ACL sandbox enforcement is real on our hosts. Until proven, only `delegated-unmediated` is offered.
-- **Codex SDK surface:** `Codex(config: CodexConfig)`, `thread_start(approval_mode, config, cwd, sandbox, model, ...)`, `thread_resume`, `thread_fork`, `thread.turn()` handle with `stream()`, `steer()`, `interrupt()`, `run()`; `Sandbox.read_only | workspace_write | full_access`; typed notifications with `UnknownNotification` fallback; `ExternalMessage` for untrusted content with tool-level authority (never user authorization). The **default `approval_mode` is `auto_review`**, so the adapter requires an explicit caller-chosen mode. `CodexConfig(codex_bin=...)` can pin the runtime; `ExternalMessage` needs Codex CLI >= 0.151.0. Thread resume/fork map onto ForgeWeave resume/branch. An MCP-only restriction for Codex is not documented in the SDK reference and stays an open spike (M0.14c).
-
-Implemented so far (stdlib + Pydantic only; vendor SDKs are lazy imports; 15 passing unit tests with fake SDK objects via `python -m unittest discover -s tests/unit` with `PYTHONPATH=src`):
-
-| Path | Content |
-|---|---|
-| `pyproject.toml` | Package metadata; extras `engine-deepseek` (exact pins), `engine-codex`, `quality-codex-harness` (Python >= 3.12), `dev` |
-| `src/forgeweave/engines/contracts.py` | `IsolationLevel`, `EngineRequest`, `EngineEvent` (cannot be marked trusted), `EngineResult` (`authoritative` always false), `CancelToken`, `DelegatedEngine` protocol, `EngineUnavailable` |
-| `src/forgeweave/engines/policy.py` | `validate_request`: worktree is not the original checkout, engine home outside worktree/checkout/user home, delegated opt-in, forbidden effects (`browser`, `mcp`, `network`, `publish`, `credentials`), provider allow-list |
-| `src/forgeweave/engines/general.py` | Generic adapters: JSON-RPC stdio (`JsonRpcEngine`) over documented `DeepSeekHarness(dsh_home, cwd, profile, patches, provider, model)`, `.run`, `.close`; app-server (`AppServerEngine`) over documented `Codex`, `thread_start`, `thread.turn().run()/interrupt()`. Official-SDK signature check, upload-attestation gate, explicit `approval_mode`, `workspace_write` sandbox default |
-| `src/forgeweave/engines/registry.py` | `get_engine(name)`; `native` is rejected because it is the core loop |
-| `tests/unit/test_engines.py` | Policy, untrusted-event, availability, confinement-argument and cancellation behavior |
-| `src/forgeweave/verify/regression.py` | codex-harness-derived baseline-vs-after policy (`Finding`, `regressions`) and `RetryBudget`; 11 tests in `tests/unit/test_regression.py` |
-
-Not yet done: real-runtime spikes (M0.14a/b/c/e), event-store linkage, worktree creation, verifier hand-off, import-linter contract.
-
-Sources: [DeepSeek Harness repo](https://github.com/deepseek-ai/deepseek-harness), [architecture](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/architecture.md), [Python SDK](https://github.com/deepseek-ai/deepseek-harness/blob/master/python/sdk/README.md), [Python guide](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/user/guide/python-sdk.md), [PyPI deepseek-harness-sdk](https://pypi.org/project/deepseek-harness-sdk/), [PyPI deepseek-harness-runtime-bin](https://pypi.org/project/deepseek-harness-runtime-bin/), [OpenAI Codex Python SDK](https://github.com/openai/codex/blob/main/sdk/python/README.md), [PyPI codex-harness](https://pypi.org/project/codex-harness/), [codex-harness repo](https://github.com/r-tatarinov/codex-harness). Evidence level: vendor-documented (not source-verified).
-
+Existing `engines` modules/extras are inactive experiments; do not expand, install or expose them as part of the native CLI. Native provider adapters call model APIs directly. Reuse baseline-vs-after verification ideas in the existing `verify` owner, scoped registrations in `plugins`, and event-derived history in `sessions`. Third-party `codex-harness` is distinct from OpenAI's runtime. No vendor code, SDK or CLI is required to run ForgeWeave.
 ## 5. Repository layout (target)
 
 ```
@@ -142,7 +77,7 @@ forgeweave/
   src/forgeweave/
     contracts/   events/   task/   core/       # core = agent loop, budgets, cancellation
     models/      routing/  context/ memory/
-    engines/                       # optional delegated engines (deepseek, codex); never imported by core
+    engines/                       # inactive legacy experiments; outside product delivery
     tools/       policy/   workspace/ sessions/
     browser/     mcp/      skills/  agents/
     automation/  ralph/    verify/  telemetry/
@@ -189,7 +124,7 @@ Budget `B = W - O - T - S`. Prompt order: platform/task policy -> repo instructi
 Threat model: prompt injection (code/issues/web/MCP), malicious plugins/skills, shell output, SSRF, path traversal and symlink escape, credential leakage, concurrent worktree writes, automation replay, memory poisoning, supply chain, artifact tampering. Redaction before persistence. Adversarial fixture suite maintained from M1 onward.
 
 ### 7.4 Observability
-OTel-compatible spans: task, iteration, context build, retrieval, Laya, model, policy, tool, verification, memory. Correlate by `task_id` + `trace_id`. Separate Laya load latency, inference latency and downstream model latency. Track estimated vs billed tokens separately; enforce spend ceilings.
+OTel-compatible spans: task, iteration, context build, retrieval, model, policy, tool, verification, memory. Correlate by `task_id` + `trace_id`. Separate context, model and tool latency. Track estimated vs billed tokens separately; enforce spend ceilings.
 
 ### 7.5 Verification
 Select checks from repo config and change impact (format, lint, type, tests, build, security scan, smoke). Capture command, env fingerprint, exit status, timing, truncated output + artifact ref. Agent-run tests are separate from independent acceptance checks. Repeated identical failure stops the repair loop.
@@ -201,7 +136,7 @@ Quality-regression layer (adopted design from codex-harness, native implementati
 Milestones are dependencies, not calendar promises. A milestone is done only when its gate passes with recorded evidence.
 
 ### M0 — Research and contracts
-**Deliverables:** `docs/research/capability-matrix.md` (row per product/feature, source URL, retrieval date, evidence level: source-verified / vendor-documented / inferred, target milestone); ADRs (event protocol, worktree isolation, provider boundary, Laya/System 2 split, persistence, CLI framework choice, ADR-000 doc reconciliation); versioned JSON Schemas; threat model; evaluation task set outline; project skeleton (`pyproject.toml`, lint/type/test config, import-linter contracts, CI on Windows + Linux).
+**Deliverables:** `docs/research/capability-matrix.md` (row per product/feature, source URL, retrieval date, evidence level: source-verified / vendor-documented / inferred, target milestone); ADRs (event protocol, worktree isolation, provider boundary, persistence, CLI framework choice, ADR-000 doc reconciliation); versioned JSON Schemas; threat model; evaluation task set outline; project skeleton (`pyproject.toml`, lint/type/test config, import-linter contracts, CI on Windows + Linux).
 **Gate:** every feature in AGENTS.md maps to a requirement and owner; unknown proprietary internals marked unknown; schema round-trip tests pass.
 
 ### M1 — Local vertical slice
@@ -225,9 +160,9 @@ ADR-002 gate additions: M1.H1 introduces local redacted JSONL diagnostics and op
 ### M2 — Extensible harness
 
 ADR-002 additions (M2.H1-H6): first-class `web_search` and separate `web_fetch` with DDGS then configured SearXNG, query disclosure controls, citations and failure fixtures; complete local/OTel log-span-metric/export surfaces; explicit hook failure/ordering semantics; measured harness evaluation. Search adapters live under `tools/web`, using the existing registry and gateway. DDGS is optional and automatic backend disclosure is prohibited. See SYSTEM_DESIGN 14.5/14.7.
-**Deliverables:** `engines` package with `DelegatedEngine` protocol and `--engine native|jsonrpc|appserver` (default native); JSON-RPC stdio and app-server adapters in `engines/general.py` over `deepseek-harness-sdk` and `openai-codex`, both optional extras with isolated homes, event import as untrusted `EngineEvent`, mediated-mode spike, delegated-mode labeling; optional `codex-harness-check` verifier plugin; extra analyzer adapters (Flake8, Pylint, Black, MyPy); additional provider adapters (Anthropic, Moonshot, native DeepSeek adapter, Meta, xAI where official docs exist; OpenAI-compatible adapter with compatibility tests; local endpoint); capability negotiation; hooks (before/after turn, model, tool, edit, test, approval, completion; may deny/add checks, never bypass policy); progressive skills (`.forgeweave/skills`, user dir, `.agents/skills`, `.claude/skills`; metadata first; checksum + invocation logged; skills cannot expand permissions); stdio MCP client (namespaced permissions, schema validation, caps, audit; sampling disabled); plugin manifest + out-of-process plugin runner; session branching/fork/resume; JSON/headless output; Python SDK (create task, stream events, cancel, resume, approvals, branch, artifacts, trace export); OTel JSON traces; deterministic routing policy; `fw skill|mcp|plugin` commands. Laya is deferred by ADR-001.
-**Gate:** skills/plugins cannot exceed permissions; provider and tool failures recover or fail clearly; SDK and CLI emit equivalent events; deterministic routing never affects permissions; an engine run is fully recorded as one task with untrusted imported events, never changes the original checkout, reports its true isolation level, and its absence or failure does not affect `--engine native`.
+**Deliverables:** native runtime extensions: provider capability negotiation, hooks, progressive skills, isolated plugins, stdio MCP, guarded search/fetch, session fork/replay, Python SDK, stable headless events and local traces. Reuse analyzer adapters and effective-config inspection. Follow N5 and existing M2 requirements; external-engine integration is inactive under ADR-004.
 
+**Gate:** extensions cannot exceed permissions; failures settle or recover clearly; SDK and CLI share native events; provider selection cannot alter authority; enabled search, diagnostics and hook acceptance fixtures pass.
 ### M3 — Browser and agent orchestration
 
 ADR-002 additions (M3.H1-H6): explicit delegation lifecycle and durable messages/continuations; fixed-membership fan-out/fan-in with join policies, aggregate budgets, reviewed patches and merged verification; browser-use source/runtime mediation and telemetry-off spike before an optional adapter. Default child context is selected references, not an unbounded transcript. See SYSTEM_DESIGN 14.2/14.3/14.6.
@@ -241,8 +176,9 @@ ADR-002 additions (M4.H1-H3): immutable typed DAGs, bounded map/join, leased/fen
 **Gate:** duplicate events create one task; retries never duplicate external actions or PRs; every run links to an auditable event history.
 
 ### M5 — Advanced local intelligence
-**Deliverables:** `memory/` (working, session, episodic, project, user, procedural stores; candidate -> verified -> accepted promotion; contradiction/supersession; expiry; redaction; `fw memory list|show|search|add|approve|edit|forget|export`); optional semantic index (scoped, hash+commit tied, compared to lexical baseline before default-on); cost controls and model-tier escalation; remote MCP (Streamable HTTP + auth); `ralph/` controller (immutable goal, versioned spec, plan.json, progress.jsonl, one unit per iteration, fresh context, independent verifier, stall detection, checkpoints, `fw ralph start|status|pause|resume|stop|explain`, no recursive Ralph); richer browser UI tests; workflow templates. Laya is deferred by ADR-001.
-**Gate:** memory is inspectable/correctable/deletable and deleted entries never reappear in prompts; Ralph rejects false completion and stops stalled loops; multi-agent integration preserves verification evidence. Laya is excluded by ADR-001.
+**Deliverables:** `memory/` (working, session, episodic, project, user, procedural stores; candidate -> verified -> accepted promotion; contradiction/supersession; expiry; redaction; `fw memory list|show|search|add|approve|edit|forget|export`); optional semantic index (scoped, hash+commit tied, compared to lexical baseline before default-on); cost controls and model-tier escalation; remote MCP (Streamable HTTP + auth); `ralph/` controller (immutable goal, versioned spec, plan.json, progress.jsonl, one unit per iteration, fresh context, independent verifier, stall detection, checkpoints, `fw ralph start|status|pause|resume|stop|explain`, no recursive Ralph); richer browser UI tests; workflow templates.
+
+**Gate:** memory is inspectable/correctable/deletable and deleted entries never reappear in prompts; Ralph rejects false completion and stops stalled loops; multi-agent integration preserves verification evidence.
 
 ### M6 — CLI hardening and release
 **Deliverables:** fault injection suite, security review, supply-chain + license review, migration/backup/restore drills (SQLite + artifacts), Windows/macOS/Linux package validation, CLI accessibility, docs, support runbooks, release pipeline, SBOM.
@@ -258,9 +194,7 @@ M2 -> browser + agents/scheduler (M3) -> automation/workflows/GitHub (M4)
 M4 + M2 -> memory/Ralph (M5) -> hardening (M6)
 ```
 
-Parallelizable after M1 core: skills, MCP client, telemetry, SDK, capability matrix, eval corpus. Laya is deliberately excluded.
-
-## 10. Testing strategy
+Parallelizable after M1 core: skills, MCP client, telemetry, SDK, capability matrix, eval corpus.## 10. Testing strategy
 
 - **Unit:** contracts, state machine transitions, path guard, patch hash conflict, budget math, cron/DST, expression parser.
 - **Integration:** real temp Git repos, real worktrees, real subprocess cancellation, fake model provider (scripted tool calls), local Playwright fixture server, stdio MCP fixture server.
@@ -286,15 +220,11 @@ Parallelizable after M1 core: skills, MCP client, telemetry, SDK, capability mat
 |---|---|
 | Memory contaminates prompts | Scoped retrieval, citations, expiry, review, no policy elevation |
 | Long AGENTS.md crowds context | Convert to concise index after M0 |
-| Future Laya confidence may be miscalibrated | Deferred by ADR-001; any future proposal requires in-domain calibration and deterministic fallback |
 | Ralph amplifies errors/cost | Finite budgets, one unit/iteration, independent verifier, stall detector |
 | Worktree != sandbox | Honest isolation reporting, approvals, least-privilege subprocess env |
 | Stale browser/MCP state | Revalidate on every execution; expire refs/catalogs |
 | Windows console quirks | CLI framework spike in M0 |
 | Provider API drift | Capability descriptors, adapter compatibility tests, pinned versions |
-| DeepSeek Harness is pre-release (0.1.5rc1) and a bundled Node runtime | Optional extra only; exact pin; Windows x64 smoke test; native engine is default |
-| Delegated engines bypass per-call policy and can run unconfined (`danger-full-access`) | Mediated mode preferred; delegated mode needs opt-in, worktree-only, honest isolation label, independent verification |
-| DeepSeek session-log upload sends task data with requests | Ship patch disabling `session-log-deepseek`; repository policy check before any engine run |
 | Confusing `codex-harness` (third-party hooks) with OpenAI Codex | Dependency table in plan.md 4.1; ADR-010 |
 | Bare `deepseek-harness` is an unrelated package with the same import name as the official SDK | Pin official `deepseek-harness-sdk`; declare conflict; runtime signature check; never install both |
 | `codex-harness` needs Python 3.12 and writes to `~/.codex` | Native implementation by default; optional isolated-HOME subprocess verifier |
@@ -308,23 +238,18 @@ Parallelizable after M1 core: skills, MCP client, telemetry, SDK, capability mat
 4. Subprocess isolation options on Windows (Job Objects, restricted tokens) and what level to claim.
 5. Plugin process protocol (JSON-RPC over stdio assumed) and signing/trust source.
 6. Where Ralph/plan artifacts live when users want them checked in.
-7. Laya checkpoint choice after CPU memory/latency benchmark; ONNX parity decision.
 8. Branch naming/slug collisions and cleanup retention defaults.
-9. Redaction rules and consented trace collection for routing dataset.
-10. License policy for dependencies, Laya, and optional engines (MIT for DeepSeek packages, Apache-2.0 for openai-codex and codex-harness; preserve notices).
-11. Can the DeepSeek `dsh` runtime and Codex app-server be restricted to ForgeWeave-served MCP tools only (mediated mode)? Spike result decides whether delegated mode ships at all.
-12. ~~Does the bare `deepseek-harness` PyPI name exist?~~ Resolved 2026-10-01: it is an unrelated third-party client (0.3.1) that shares the `deepseek_harness` import name with the official SDK. Engine extras must declare a conflict with it, and the engine adapter must import-check `deepseek_harness.DeepSeekHarness` has the official SDK's `dsh_home` parameter before use.
-14. Spikes M0.14a-e require installing third-party packages and were **not executed** during planning (the installation was blocked as high-risk by tooling); run them in a disposable venv before any engine code is written.
-13. Which engine event types map to ForgeWeave events, and how to reconcile an engine crash mid-run (engine session id + ForgeWeave attempt id).
+9. Redaction rules and consented evaluation trace collection.
+10. License policy for dependencies, and optional engines (MIT for DeepSeek packages, Apache-2.0 for openai-codex and codex-harness; preserve notices).
 
 ## 14. Immediate next actions
 
 For implementation using GPT-5.6 Luna in Codex, follow [CODEX_LUNA_BUILD.md](CODEX_LUNA_BUILD.md). It supplies the start/resume prompts, bounded context workflow and dependency-ready slice index without replacing this plan or todo.md.
 
 1. Apply the completed [ADR-000](docs/architecture/adr-000.md) and review [the gap assessment](docs/research/architecture-review-2026-10-02.md); resolve Git-root ownership and containment unknowns before mutating execution.
-2. Complete M0 contract definitions and Windows CLI/process/storage spikes; record ADR-010 and measured dependency/isolation decisions. Existing engine scaffolding is not a passed native-harness gate.
+2. Complete M0 contract definitions and Windows CLI/process/storage spikes; record measured native dependency/isolation decisions. Existing engine scaffolding is not a passed native-harness gate.
 3. Implement one native M1 vertical slice with protected context, all budget ceilings, action-bound approval, event/artifact persistence and crash reconciliation together.
-4. Verify the seeded-bug/crash/resume scenario before optional engines, routing or delegation. Preserve the existing M0–M6 task IDs and evidence.
+4. Verify the seeded-bug/crash/resume scenario before extension and delegation expansion. Preserve the existing M0–M6 task IDs and evidence.
 
 ## 15. Pre-development review and implementation amendments (2026-10-02)
 
@@ -347,8 +272,6 @@ Security and compatibility constraints apply to every slice: native Windows 11/P
 ### 15.1 Clarifications superseding ambiguous earlier wording
 
 - Section 3 reconciliation is now recorded by ADR-000. Conceptual stages in SYSTEM_DESIGN do not reorder milestones. Keep AGENTS as an inventory until migration preserves every normative requirement.
-- Section 4.1's proposed engine protocol is illustrative; use the existing contracts' `run`/event/cancellation surface when implementing, extending the owning module for resume rather than creating another adapter API. Real-runtime mediation remains unproven.
-- Engine restrictions listed as requested effects are pre-flight checks, not proof that engine subprocesses cannot make network or filesystem accesses. Restricted engine execution needs measured OS enforcement or an explicitly disclosed unconfined task authorization; never silently weaken repository privacy rules.
 - Section 7.2 context includes M1 basic summary validation and requirement retention, not just trimming. Long-term memory stays M5. “Model-visible means logged” means a reconstructable ordered manifest with declared retention fidelity; exact sensitive payload retention is opt-in.
 - Section 7.4 and M5 cost controls do not postpone spend ceilings: reservations and conservative unknown-usage accounting are M1. M5 adds price/quality optimization.
 - SQLite transactions and artifact files cannot be committed as one filesystem/DB operation; use publish-before-index and reconciliation. Approval, task transition and event writes use owner repositories within one transaction unit of work.
