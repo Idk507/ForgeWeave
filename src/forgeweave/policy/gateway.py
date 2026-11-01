@@ -37,6 +37,7 @@ class PolicyRule:
     tool_name: str
     outcome: PolicyOutcome
     reason: str
+    argument_matches: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -375,7 +376,7 @@ class PolicyGateway:
 
     def _rule_for(self, call: ToolCall) -> PolicyRule | None:
         for rule in self._rules:
-            if rule.tool_name == call.tool_name:
+            if rule.tool_name == call.tool_name and all(call.arguments.get(key) == value for key, value in rule.argument_matches):
                 return rule
         return None
 
