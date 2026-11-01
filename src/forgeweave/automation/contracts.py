@@ -173,6 +173,7 @@ class StepAttempt:
     step_id: str
     idempotency_key: str
     lease_token: str | None = None
+    worker_id: str | None = None
     status: WorkflowStepStatus = WorkflowStepStatus.PENDING
 
     def __post_init__(self) -> None:
@@ -183,6 +184,8 @@ class StepAttempt:
             ("idempotency_key", self.idempotency_key),
         ):
             _require_id(field, value)
+        if self.worker_id is not None:
+            _require_id("worker_id", self.worker_id)
 
 
 def validate_workflow_definition(definition: WorkflowDefinition) -> None:
