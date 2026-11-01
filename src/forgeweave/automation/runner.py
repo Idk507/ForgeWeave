@@ -6,12 +6,16 @@ tools, shell commands, browser actions, network requests or publication effects.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
+from .artifacts import artifact_records_from_output, validate_artifact_bindings
 from .contracts import StepAttempt, WorkflowRunStatus, WorkflowStep, WorkflowStepKind, WorkflowStepStatus
-from .executors import WorkflowExecutionContext, WorkflowExecutorRegistry
+from .executors import WorkflowExecutionContext, WorkflowExecutionResult, WorkflowExecutorRegistry
+from .idempotency import workflow_attempt_identity
 from .planner import StepState, plan_workflow
 from .store import WorkflowStore
+from .worker_leases import workflow_worker_lease_token
 
 
 @dataclass(frozen=True)
@@ -41,6 +45,8 @@ def run_workflow_once(
     run_id: str,
     max_ready_steps: int | None = None,
     executors: WorkflowExecutorRegistry | None = None,
+    lease_token_factory: Callable[[str, str, int], str | None] | None = None,
+    worker_id: str | None = None,
 ) -> WorkflowRunnerResult:
     """Advance ready workflow steps into persisted attempts without executing effects."""
 
@@ -52,7 +58,7 @@ def run_workflow_once(
     counts = _attempt_counts(attempts)
     states = _retry_aware_states(step_by_id, latest, counts)
     plan = plan_workflow(definition, states)
-    if run.status is WorkflowRunStatus.PENDING and (plan.ready or plan.active):
+    if run.status in {WorkflowRunStatus.PENDING, WorkflowRunStatus.WAITING_EXTERNAL} and (plan.ready or plan.active):
         run = store.update_run_status(run_id, WorkflowRunStatus.RUNNING)
     elif run.status in {WorkflowRunStatus.FAILED, WorkflowRunStatus.CANCELLED, WorkflowRunStatus.SUCCEEDED}:
         return WorkflowRunnerResult(run_id=run.run_id, run_status=run.status, ready_before=plan.ready, recorded_steps=())
@@ -62,26 +68,46 @@ def run_workflow_once(
     for step_id in ready:
         step = step_by_id[step_id]
         attempt_count = counts.get(step_id, 0)
-        status, reason = _safe_status_for_step(
+        status, reason, execution_result = _safe_status_for_step(
             step,
             run_id=run_id,
             workflow_id=definition.workflow_id,
             attempt_count=attempt_count,
             executors=executors,
         )
-        attempt_id = _attempt_id(run_id, step_id, attempts)
+        attempt_number = attempt_count + 1
+        identity = workflow_attempt_identity(run_id=run_id, step_id=step_id, attempt_number=attempt_number)
+        lease_token = _lease_token_for_attempt(
+            run_id=run_id,
+            step_id=step_id,
+            attempt_number=attempt_number,
+            lease_token_factory=lease_token_factory,
+            worker_id=worker_id,
+        )
         attempt = store.record_attempt(
             StepAttempt(
-                attempt_id=attempt_id,
+                attempt_id=identity.attempt_id,
                 run_id=run_id,
                 step_id=step_id,
-                idempotency_key=f"{run_id}:{step_id}:{attempt_id}",
+                idempotency_key=identity.idempotency_key,
+                lease_token=lease_token,
+                worker_id=worker_id,
                 status=status,
             )
         )
+        if execution_result is not None and attempt.status is WorkflowStepStatus.SUCCEEDED:
+            for artifact in artifact_records_from_output(
+                run_id=run_id,
+                step_id=step_id,
+                attempt_id=attempt.attempt_id,
+                output=execution_result.output,
+            ):
+                store.record_artifact(artifact)
         recorded.append(WorkflowRunnerStep(step_id=step_id, attempt_id=attempt.attempt_id, status=attempt.status, reason=reason))
 
-    if not recorded and plan.done and not plan.failed:
+    if any(step.status is WorkflowStepStatus.WAITING_APPROVAL for step in recorded):
+        run = store.update_run_status(run_id, WorkflowRunStatus.WAITING_APPROVAL)
+    elif not recorded and plan.done and not plan.failed:
         run = store.update_run_status(run_id, WorkflowRunStatus.SUCCEEDED)
     elif plan.failed:
         run = store.update_run_status(run_id, WorkflowRunStatus.FAILED)
@@ -126,11 +152,11 @@ def _safe_status_for_step(
     workflow_id: str,
     attempt_count: int,
     executors: WorkflowExecutorRegistry | None,
-) -> tuple[WorkflowStepStatus, str]:
+) -> tuple[WorkflowStepStatus, str, WorkflowExecutionResult | None]:
     if step.kind is WorkflowStepKind.JOIN:
-        return WorkflowStepStatus.SUCCEEDED, "join satisfied by persisted dependency state"
+        return WorkflowStepStatus.SUCCEEDED, "join satisfied by persisted dependency state", None
     if step.kind is WorkflowStepKind.APPROVAL:
-        return WorkflowStepStatus.WAITING_APPROVAL, "approval step requires an external approval boundary"
+        return WorkflowStepStatus.WAITING_APPROVAL, "approval step requires an external approval boundary", None
     if executors is not None:
         result = executors.execute(
             WorkflowExecutionContext(
@@ -140,12 +166,27 @@ def _safe_status_for_step(
                 attempt_number=attempt_count + 1,
             )
         )
-        return result.status, result.reason
+        if result.status is WorkflowStepStatus.SUCCEEDED:
+            artifacts = validate_artifact_bindings(step, result.output)
+            if not artifacts.valid:
+                return WorkflowStepStatus.FAILED, artifacts.reason, result
+        return result.status, result.reason, result
     if attempt_count:
-        return WorkflowStepStatus.WAITING_EXTERNAL, f"retry {attempt_count + 1} is deferred until a mediated executor is available"
-    return WorkflowStepStatus.WAITING_EXTERNAL, f"{step.kind.value} execution is deferred until a mediated executor is available"
+        return WorkflowStepStatus.WAITING_EXTERNAL, f"retry {attempt_count + 1} is deferred until a mediated executor is available", None
+    return WorkflowStepStatus.WAITING_EXTERNAL, f"{step.kind.value} execution is deferred until a mediated executor is available", None
 
 
-def _attempt_id(run_id: str, step_id: str, attempts: tuple[StepAttempt, ...]) -> str:
-    count = sum(1 for attempt in attempts if attempt.step_id == step_id) + 1
-    return f"{run_id}-{step_id}-{count}"
+
+def _lease_token_for_attempt(
+    *,
+    run_id: str,
+    step_id: str,
+    attempt_number: int,
+    lease_token_factory: Callable[[str, str, int], str | None] | None,
+    worker_id: str | None,
+) -> str | None:
+    if lease_token_factory is not None:
+        return lease_token_factory(run_id, step_id, attempt_number)
+    if worker_id is not None:
+        return workflow_worker_lease_token(worker_id=worker_id, run_id=run_id, step_id=step_id, attempt_number=attempt_number)
+    return None
