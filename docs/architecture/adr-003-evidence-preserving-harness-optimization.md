@@ -16,7 +16,7 @@ Add SYSTEM_DESIGN section 15 and canonical P-series tasks. Preserve original evi
 Automatically enabling all paper mechanisms would import unvalidated quality tradeoffs and model assumptions. Unchecked summaries would undermine evidence. Combined tools with inherited permission would weaken the gateway. Selecting by token reduction alone would ignore correctness and auxiliary cost. Reusing final evaluation feedback for tuning would weaken claims of generalization.
 
 ## Consequences
-Baseline evidence fixtures join M1. Optional optimizations follow in M2; worker evidence exchange follows in M3; isolated auto-research workflows remain later development tooling. M6 adds explicit freeze, release evaluation and rollback artifacts. No vendor package is installed and no reported benchmark gain becomes a ForgeWeave guarantee. User choice of Luna as the build model is preserved without changing runtime model configuration. ADR-001 and ADR-002 remain in force.
+Baseline evidence fixtures join M1. Optional optimizations follow in M2; worker evidence exchange follows in M3; isolated auto-research workflows remain later development tooling. M6 adds explicit freeze, release evaluation and rollback artifacts. No vendor package is installed and no reported benchmark gain becomes a ForgeWeave guarantee. User choice of Luna as the build model is preserved without changing runtime model configuration. ADR-002 remains in force; ADR-004 updates the native product boundary.
 
 ## Evidence
 [Paper](https://arxiv.org/pdf/2609.20519), [review](../research/sol-pi-review-2026-10-04.md), [architecture](../../SYSTEM_DESIGN.md#15-evidence-preserving-optimization-and-shipping-contracts), [todo](../../todo.md).
