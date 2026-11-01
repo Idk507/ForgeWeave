@@ -22,7 +22,7 @@ The feature inventory already named agents, workflows, loops and telemetry, but 
 Embedding DeepSeek or Codex as the core would divide state and authority between harnesses. Running browser-use as an unrestricted nested agent would conceal browser actions from policy. DDGS automatic backend selection would make query disclosure difficult to explain. Listing broad features without requirements and tests repeats the original gap.
 
 ## Consequences
-M0 gains a research/coverage gate; M1 gains diagnostic instrumentation; M2 gains search; M3 gains explicit delegation and browser-use investigation; M4 gains workflow join/recovery contracts. Existing completed slices remain completed only to their recorded scope. Package versions observed during research are not new dependency pins; compatible wheels and Windows behavior must be tested before integration. ADR-001 continues to defer Laya.
+M0 gains a research/coverage gate; M1 gains diagnostic instrumentation; M2 gains search; M3 gains explicit delegation and browser-use investigation; M4 gains workflow join/recovery contracts. Existing completed slices remain completed only to their recorded scope. Package versions observed during research are not new dependency pins; compatible wheels and Windows behavior must be tested before integration.
 
 Resolve a pre-existing scope contradiction: SYSTEM_DESIGN 13.6 described M1 as first-release acceptance while AGENTS.md's first-release scenario includes later CLI capabilities. M1 is the native vertical-slice gate, not the complete first CLI release. Preserve the broader feature inventory and validate its required enabled capabilities before claiming full release completion.
 
