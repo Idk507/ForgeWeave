@@ -4,13 +4,15 @@ Date: 2026-10-02. Target coding model: **GPT-5.6 Luna**, selected by the user in
 
 ## 1. Purpose and authority
 
+2026-11-01 amendment: [ADR-004](docs/architecture/adr-004-independent-native-cli.md) and SYSTEM_DESIGN section 16 supersede old external-engine sequencing. Use [the current next-session prompt](docs/build/NEXT_SESSION_PROMPT.md) for continuation; the older first-message/preflight text below is historical and must not restart completed contract work or assume an ancestor Git root without checking. Build full native CLI outcomes in N-series order. The user's chosen coding model remains a build preference, not a runtime-provider requirement.
+
 SoL-Pi amendment (2026-10-04): consult [paper review](docs/research/sol-pi-review-2026-10-04.md) and SYSTEM_DESIGN section 15 for P-series tasks. Establish baselines before tuning; implement one mechanism behind an explicit option; validate source/effect identity; measure auxiliary spend; update evidence before enabling it. Luna as the build model is not automatic authorization to add runtime auxiliary models. Release validators and final evaluation tasks stay outside the optimizing agent's writable scope.
 
 2026-10-04 research amendment: read [feature coverage](docs/feature-coverage.md), [ADR-002](docs/architecture/adr-002-harness-coverage-and-research-tools.md), and only the relevant SYSTEM_DESIGN section 14 subsection before its slice. The [source review](docs/research/harness-source-review-2026-10-04.md) records upstream commits and package identity; implementation must check the pinned release API rather than assume repository HEAD equals an installed wheel. Include local diagnostics in the M1 loop gate, web search in M2, delegation/fan-out/fan-in and browser-use feasibility in M3, and workflow joins/recovery in M4. No feature may disappear from summaries or the backlog merely because delivery is later.
 
 For each Luna slice load the current objective, relevant contract, source references, affected code/tests and last verified checkpoint. Keep the full feature matrix on disk; use its row IDs in the handoff. Record completed/pending IDs, commands actually run, changed files, source hashes, remaining risks and next dependency-ready task in BUILD_TRACKER.md before a context reset. Never assume an SDK stub or design document means the runtime feature is implemented.
 
-Build the native Python CLI in small, independently verified slices. Complete the single-agent M1 gate before optional engine expansion, routing or delegation. This guide supplements [AGENTS.md](AGENTS.md), [SYSTEM_DESIGN.md](SYSTEM_DESIGN.md), [plan.md](plan.md), [todo.md](todo.md) and [ADR-000](docs/architecture/adr-000.md). It cannot override their security or compatibility requirements. If they conflict, stop the affected change, record a decision and synchronize the documents.
+Build the native Python CLI in small, independently verified slices. Complete the single-agent M1 gate before extension and delegation expansion. This guide supplements [AGENTS.md](AGENTS.md), [SYSTEM_DESIGN.md](SYSTEM_DESIGN.md), [plan.md](plan.md), [todo.md](todo.md) and [ADR-000](docs/architecture/adr-000.md). It cannot override their security or compatibility requirements. If they conflict, stop the affected change, record a decision and synchronize the documents.
 
 Use the existing source as scaffolding, not proof of a completed harness. Engine adapters and the regression helper already exist; inspect and reuse their owning modules. Do not regenerate the project from scratch.
 
@@ -110,7 +112,7 @@ This is an execution index into todo.md, not a replacement backlog. Each row may
 
 Steps 5–11 must be integrated into one fake-provider task flow before claiming the native slice complete. Step 12 requires current official provider documentation and explicit credential/network setup. Selecting Luna as the **Codex builder** does not select the model ForgeWeave will call at runtime.
 
-Optional engine-specific M0 runtime spikes are deferred to M2 after M1, as clarified in todo.md. Subsequent work follows M2–M6 gates; do not jump to browser orchestration, learned memory, Laya active routing or Ralph while the native spine is incomplete.
+External-engine runtime spikes are retired from active delivery by ADR-004. Subsequent work follows M2–M6 gates; do not jump to browser orchestration, learned memory or Ralph while the native spine is incomplete.
 
 ## 6. Verification discipline
 
