@@ -1,6 +1,8 @@
 # ForgeWeave feature coverage and implementation evidence
 
-Updated 2026-10-04. This preserves product scope and exposes gaps. **Planned** means no end-to-end runtime proof. **Partial** identifies existing code without claiming the full feature. Canonical work status lives in [todo](../todo.md) and [tracker](../BUILD_TRACKER.md); architecture lives in [SYSTEM_DESIGN](../SYSTEM_DESIGN.md). The native single-agent gate precedes optional engines and delegation. Laya is explicitly deferred.
+2026-11-01 amendment (ADR-004): the source-backed native CLI plan is SYSTEM_DESIGN section 16 and todo N0–N8. Rows below retain historical status until individually reconciled; they are not a current completion percentage. F01/F02/F03/F05/F07/F09/F16/F25 are partial building blocks; native CLI composition, multi-step feedback and kill/resume remain unproved. F27 external-engine delivery is retired from the active product; existing experimental adapters are not required. Removed feature IDs remain unassigned rather than being renumbered. Source evidence: [current review](research/native-cli-source-review-2026-11-01.md).
+
+Updated 2026-10-04. This preserves product scope and exposes gaps. **Planned** means no end-to-end runtime proof. **Partial** identifies existing code without claiming the full feature. Canonical work status lives in [todo](../todo.md) and [tracker](../BUILD_TRACKER.md); architecture lives in [SYSTEM_DESIGN](../SYSTEM_DESIGN.md). The native single-agent gate precedes optional engines and delegation.
 
 | ID | Required feature | Owner | Canonical work | Acceptance evidence required | Current status |
 |---|---|---|---|---|---|
@@ -30,10 +32,9 @@ Updated 2026-10-04. This preserves product scope and exposes gaps. **Planned** m
 | F24 | Harness evaluation, fault injection, regression analysis | verify/telemetry | M1.H2, M2.H6, M6.H1 | Corpus/config/fingerprint + measured acceptance | Partial baseline regression helper; eval runner pending |
 | F25 | Interactive CLI/TUI, headless JSON, interruption, image input | cli/models | M1 CLI, M2.21, M6 | Windows console/stream/cancel fixtures and capability gates | Planned |
 | F26 | Python SDK and equivalent CLI lifecycle/events | sdk | M2.22-23 | Create/stream/cancel/resume/approve/fork/export parity | Planned |
-| F27 | Optional DeepSeek/Codex delegated engines | engines | M2 engine tasks, M0.14 runtime spikes | Real runtime, audit linkage, truthful isolation, verifier | Partial adapters/fake tests; runtime proof pending |
+| F27 | External harness delegation experiments | engines | ADR-004 | Separate future decision required | Retired from active product; existing code inactive |
 | F28 | Supervised long-horizon Ralph | ralph/core/verify | M5 Ralph tasks | Fresh context, no false completion, stalls/limits | Planned |
 | F29 | Config inspection, secrets, health/support diagnostics | cli/policy/telemetry | M0 spikes, M1.R6, M6.R1 | Effective config, secret absence, honest capability report | Planned |
-| F30 | Laya | routing | ADR-001 | Separate future decision and calibration gates | Deferred at user's direction |
 | F31 | Editor completion/web UI/ACP/cloud workers | future integrations | Explicit initial-release exclusion | New integration design before development | Deferred; CLI features above remain in scope |
 
 Source-to-design mapping is in [research](research/harness-source-review-2026-10-04.md). A later milestone is sequencing, not removal from product scope. Completing one row's scaffolding does not close its acceptance gate.
