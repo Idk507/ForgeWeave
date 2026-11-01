@@ -9,20 +9,18 @@ This file tracks the concrete implementation slices I am going to build next. It
 - Work one small slice at a time.
 - Before editing, record the owning module, acceptance criteria, expected checks, security impact, and compatibility constraints.
 - Mark a slice done only after code, tests, and evidence exist.
-- Keep optional engines, browser, automation, subagents, and long-term memory out of scope until the native M0/M1 prerequisites are done. Laya integration is deferred by ADR-001 and remains out of scope for this tracker.
+- Keep optional engines, browser, automation, subagents, and long-term memory out of scope until the native M0/M1 prerequisites are done.
 - Do not create commits, branches, or worktrees until the repository-root boundary is resolved.
 
 ## Current repository boundary
 
-Git currently resolves the repository root to `C:/Users/dhanu/Downloads`, while the project workspace is `C:/Users/dhanu/Downloads/ForgeWeave`. Until this is resolved, implementation may continue in files, but Git worktree, branch, commit, and cleanup features must not be exercised against the ancestor repository.
+Rechecked 2026-11-01: `git rev-parse --show-toplevel` returns `C:/Users/dhanu/Downloads/ForgeWeave`. The earlier ancestor-root warning is historical and no longer describes this checkout. Preserve the existing dirty worktree and recheck root/ownership before every Git mutation. New native acceptance fixtures must use temporary real repositories; this research update did not create branches, commits or worktrees.
 
 ## Build queue
 
 RG-003 (2026-10-04): Documentation review completed; validation below. Scope: reviewed arXiv 2609.20519 methods/results/limitations and mapped findings into context/tools/agents/verify/telemetry contracts and shipping gates. Evidence: `docs/research/sol-pi-review-2026-10-04.md`, ADR-003, SYSTEM_DESIGN section 15, coverage F32-F35, 10 canonical P-series tasks and synchronized Luna guide. Security: individual policy decisions and source evidence survive batching/reduction; no automatic production harness self-modification. Compatibility: native Windows/Python 3.11 and user-selected Luna; no inferred savings/capability guarantee. Runtime optimizations remain pending, conditional and measured; BT-008 remains next native slice.
 
-Research gate RG-002 (2026-10-04): Done for documentation scope before BT-008. Owners: architecture/research docs, `core`, `agents`, `automation`, `tools`, `browser`, `telemetry`. Acceptance: inspected pinned upstream source, package identity and four published Python wheels (archive hashes verified; selected modules match reviewed source); mapped harness/loop engineering, custom agents, delegation, fan-out/fan-in, workflows, web search, browser-use and observability to owners, milestones and behavioral checks; synchronized authoritative docs and Luna guide. Checks: nine Markdown files have no missing local links; 20 added canonical task IDs each defined once; 31 coverage rows; `PYTHONPATH=src python -m unittest discover -s tests/unit` passed 60 tests. Security: query disclosure, external browser effects, delegated authority and trace redaction specified. Compatibility: native Windows/Python 3.11; optional packages are not core startup requirements. Limitations: no package installed/executed, no runtime mediation/containment proof, Muse Code implementation pages inaccessible; these remain tracked open work. Laya stays deferred.
-
-| Order | Tracker ID | Canonical IDs | Status | Build target | Acceptance evidence |
+Research gate RG-002 (2026-10-04): Done for documentation scope before BT-008. Owners: architecture/research docs, `core`, `agents`, `automation`, `tools`, `browser`, `telemetry`. Acceptance: inspected pinned upstream source, package identity and four published Python wheels (archive hashes verified; selected modules match reviewed source); mapped harness/loop engineering, custom agents, delegation, fan-out/fan-in, workflows, web search, browser-use and observability to owners, milestones and behavioral checks; synchronized authoritative docs and Luna guide. Checks: nine Markdown files have no missing local links; 20 added canonical task IDs each defined once; 31 coverage rows; `PYTHONPATH=src python -m unittest discover -s tests/unit` passed 60 tests. Security: query disclosure, external browser effects, delegated authority and trace redaction specified. Compatibility: native Windows/Python 3.11; optional packages are not core startup requirements. Limitations: no package installed/executed, no runtime mediation/containment proof, Muse Code implementation pages inaccessible; these remain tracked open work.| Order | Tracker ID | Canonical IDs | Status | Build target | Acceptance evidence |
 |---:|---|---|---|---|---|
 | 1 | BT-001 | M0.R1 | Done | Operational contracts for context, approvals, execution, budgets, isolation, and verification | `src/forgeweave/contracts/operational.py`; `tests/unit/test_contracts.py`; `PYTHONPATH=src python -m unittest discover -s tests/unit` passed 35 tests |
 | 2 | BT-002 | M0.20, M0.21 | Done | Core versioned contracts for task/session/attempt/events/tools/policy/artifacts/worktrees | `src/forgeweave/contracts/core.py`; `tests/unit/test_contract_core.py`; `PYTHONPATH=src python -m unittest discover -s tests/unit` passed 41 tests |
@@ -121,8 +119,33 @@ Research gate RG-002 (2026-10-04): Done for documentation scope before BT-008. O
 | 99 | BT-099 | M4.9 | Done | Native agent workflow executor | `src/forgeweave/automation/agent_executor.py`; focused agent-executor tests passed 4 tests; focused workflow executor/runner/CLI tests passed 68 tests; full `PYTHONPATH=src python -m unittest discover -s tests/unit` passed 375 tests |
 | 100 | BT-100 | M4.9, M4.10 | Done | Executor-enabled workflow tick CLI | `src/forgeweave/cli/workflow.py`, `src/forgeweave/cli/app.py`; focused CLI tests passed 53 tests; focused workflow executor/CLI tests passed 67 tests; full `PYTHONPATH=src python -m unittest discover -s tests/unit` passed 377 tests |
 | 101 | BT-101 | M4.9 | Done | Workflow verification-step executor | `src/forgeweave/automation/verification_executor.py`; focused verification-executor tests passed 3 tests; focused workflow executor/CLI tests passed 70 tests; full `PYTHONPATH=src python -m unittest discover -s tests/unit` passed 380 tests |
+| 102 | BT-102 | M4.9, M4.10 | Done | Verification executor CLI tick wiring | `src/forgeweave/cli/workflow.py`, `src/forgeweave/cli/app.py`; focused CLI tests passed 54 tests; focused workflow executor/CLI tests passed 71 tests; full `PYTHONPATH=src python -m unittest discover -s tests/unit` passed 381 tests |
+| 103 | BT-103 | M4.H2, M4.9 | Done | Workflow step lease fencing | `src/forgeweave/automation/leases.py`, `src/forgeweave/automation/runner.py`; focused lease/runner tests passed 12 tests; full `PYTHONPATH=src python -m unittest discover -s tests/unit` passed 387 tests |
+| 104 | BT-104 | M4.H2, M4.9 | Done | Workflow approval pause/resume helpers | `src/forgeweave/automation/approvals.py`, `src/forgeweave/automation/runner.py`; focused approval/runner tests passed 12 tests; full `PYTHONPATH=src python -m unittest discover -s tests/unit` passed 392 tests |
+| 105 | BT-105 | M4.9, M4.10 | Done | Workflow approval CLI commands | `src/forgeweave/cli/workflow.py`, `src/forgeweave/cli/app.py`; focused CLI tests passed 56 tests; focused CLI/approval tests passed 61 tests; full `PYTHONPATH=src python -m unittest discover -s tests/unit` passed 394 tests |
+| 106 | BT-106 | M4.H2, M4.9 | Done | Workflow artifact binding validation | `src/forgeweave/automation/artifacts.py`, `src/forgeweave/automation/runner.py`; focused artifact/runner tests passed 13 tests; full `PYTHONPATH=src python -m unittest discover -s tests/unit` passed 400 tests |
+| 107 | BT-107 | M4.H2, M4.9 | Done | Workflow artifact provenance persistence | `src/forgeweave/automation/artifacts.py`, `src/forgeweave/automation/store.py`, `src/forgeweave/automation/runner.py`; focused artifact/store/runner tests passed 24 tests; full `PYTHONPATH=src python -m unittest discover -s tests/unit` passed 404 tests |
+| 108 | BT-108 | M4.H2, M4.9, M4.10 | Done | Durable workflow worker lease ownership | `src/forgeweave/automation/worker_leases.py`, `src/forgeweave/automation/contracts.py`, `src/forgeweave/automation/runner.py`, `src/forgeweave/cli/app.py`; focused CLI/runner/lease/store tests passed 84 tests; full `PYTHONPATH=src python -m unittest discover -s tests/unit` passed 408 tests |
+| 109 | BT-109 | M4.H2, M4.9, M4.10 | Done | Workflow definition/input binding guards | `src/forgeweave/automation/bindings.py`, `src/forgeweave/cli/workflow.py`, `src/forgeweave/cli/app.py`; focused binding/CLI tests passed 62 tests; full `PYTHONPATH=src python -m unittest discover -s tests/unit` passed 413 tests |
+| 110 | BT-110 | M4.H2, M4.9, M4.10 | Done | Bounded workflow cancellation | `src/forgeweave/automation/cancellation.py`, `src/forgeweave/cli/workflow.py`, `src/forgeweave/cli/app.py`; focused cancellation/CLI tests passed 64 tests; full `PYTHONPATH=src python -m unittest discover -s tests/unit` passed 418 tests |
+| 111 | BT-111 | M4.H2, M4.9, M4.10 | Done | Workflow restart recovery reconciliation | `src/forgeweave/automation/recovery.py`, `src/forgeweave/cli/workflow.py`, `src/forgeweave/cli/app.py`; focused recovery/CLI tests passed 66 tests; full `PYTHONPATH=src python -m unittest discover -s tests/unit` passed 423 tests |
+| 112 | BT-112 | M4.H2, M4.9 | Done | Resumed-join recovery fixture | `src/forgeweave/automation/runner.py`, `tests/unit/test_automation_recovery.py`; focused recovery/runner tests passed 15 tests; full `PYTHONPATH=src python -m unittest discover -s tests/unit` passed 424 tests |
+| 113 | BT-113 | M4.H2, M4.9 | Done | Workflow idempotency identity and duplicate-submission fixture | `src/forgeweave/automation/idempotency.py`, `src/forgeweave/automation/runner.py`; focused idempotency/runner tests passed 14 tests; full `PYTHONPATH=src python -m unittest discover -s tests/unit` passed 427 tests |
+| 114 | BT-114 | M4.H2, M4.9, M4 GATE | Done | Persisted workflow end-to-end integration scenario | `tests/unit/test_automation_integration.py`; focused integration/runner tests passed 13 tests; full `PYTHONPATH=src python -m unittest discover -s tests/unit` passed 428 tests |
+| 115 | BT-115 | M4.H3, M4.11, M4 GATE | Done | M4 example workflow templates | `src/forgeweave/automation/templates.py`, `tests/unit/test_automation_templates.py`; focused template tests passed 5 tests; full `PYTHONPATH=src python -m unittest discover -s tests/unit` passed 430 tests |
+| 116 | BT-116 | M4.12, M4 GATE | Done | GitHub CLI read-only integration boundary | `src/forgeweave/integrations/github/gh.py`, `tests/unit/test_integrations_github.py`; focused GitHub integration tests passed 8 tests; full `PYTHONPATH=src python -m unittest discover -s tests/unit` passed 438 tests |
+| 117 | BT-117 | M4.12, M4 GATE | Done | GitHub PR commit-pinned checkout planning | `src/forgeweave/integrations/github/checkout.py`, `tests/unit/test_integrations_github_checkout.py`; focused GitHub checkout tests passed 13 tests; full `PYTHONPATH=src python -m unittest discover -s tests/unit` passed 443 tests |
+| 118 | BT-118 | M4.12, M4 GATE | Done | GitHub PR checkout plan applier | `src/forgeweave/integrations/github/worktree.py`, `tests/unit/test_integrations_github_worktree.py`; focused GitHub checkout/worktree tests passed 11 tests; full `PYTHONPATH=src python -m unittest discover -s tests/unit` passed 449 tests |
+| 119 | BT-119 | M4.13, M4 GATE | Done | GitHub signed webhook verification | `src/forgeweave/integrations/github/webhook.py`, `tests/unit/test_integrations_github_webhook.py`; focused webhook tests passed 7 tests; full `PYTHONPATH=src python -m unittest discover -s tests/unit` passed 456 tests |
+| 120 | BT-120 | M4.14, M4 GATE | Done | GitHub review-comment intake | `src/forgeweave/integrations/github/review_comments.py`, `tests/unit/test_integrations_github_review_comments.py`; focused GitHub/review-comment tests passed 15 tests; full `PYTHONPATH=src python -m unittest discover -s tests/unit` passed 463 tests |
+| 121 | BT-121 | M4.15, M4 GATE | Done | GitHub approval-required publication plans | `src/forgeweave/integrations/github/publication.py`, `tests/unit/test_integrations_github_publication.py`; focused publication tests passed 8 tests; full `PYTHONPATH=src python -m unittest discover -s tests/unit` passed 471 tests |
+| 122 | BT-122 | M4.16, M4 GATE | Done | Signed commit and branch integration plans | `src/forgeweave/integrations/github/git_integration.py`, `tests/unit/test_integrations_github_git_integration.py`; focused Git integration tests passed 7 tests; full `PYTHONPATH=src python -m unittest discover -s tests/unit` passed 478 tests |
+| 123 | BT-123 | M4.17, M4 GATE | Done | Local failure reporting adapter | `src/forgeweave/integrations/reporting/failure.py`, `tests/unit/test_integrations_reporting_failure.py`; focused reporting tests passed 4 tests; full `PYTHONPATH=src python -m unittest discover -s tests/unit` passed 482 tests |
+| 124 | BT-124 | M1.33, M1.R3, M1.42 | Done | Native-loop durable tool execution boundary | `src/forgeweave/core/loop.py`, `tests/unit/test_core_loop.py`; focused core/recovery tests passed 25 tests and full `PYTHONPATH=src python -m unittest discover -s tests/unit` passed 484 tests in 26.649 seconds |
 
 ## Active slice template
+
+Research gate RG-004 (2026-11-01), Done for research/documentation and obsolete config removal: primary-source Codex/DeepSeek/OpenCode snapshots, official Claude Code documentation and Reason product research recorded in `docs/research/native-cli-source-review-2026-11-01.md`; capability index added. ADR-004 and SYSTEM_DESIGN section 16 specify an independent native runtime; AGENTS/plan/todo/coverage/build guide synchronized; N0–N8 maps integrated outcomes to existing requirements; next-session prompt and compact handoff saved in `docs/build`. The rejected proposal, its ADR and configuration field are removed from current source/docs; zero case-insensitive repository text matches outside Git/generated caches. Local Markdown link scan: zero missing targets across edited authority docs and new references. Full offline `$env:PYTHONPATH='src'; python -m unittest discover -s tests/unit` passed 484 tests in 29.725 seconds. `python -m forgeweave.cli.app config show --json` smoke checked. No upstream packages installed/executed, live model calls or benchmark reproduction. Intentional compatibility change: obsolete config output field removed. Existing engine code/extras remain inactive experiments; native runtime gaps and kill/resume remain open. Historical Git commits were not rewritten; the deleted ADR is recoverable there.
 
 Copy this block before starting a slice and update it as work proceeds.
 
@@ -142,21 +165,42 @@ Open risks:
 
 ## Active slice
 
+Tracker ID: BT-125 (N1 native CLI composition, with N2 continuing-loop and N3 dispatch prerequisites).
+Owner: core/runtime composition using existing task/events/workspace/tools/policy/verify owners; CLI is the caller.
+Acceptance: opt-in durable `fw run --state-dir` validates explicit repository/host execution/mode/write paths, atomically admits a unique task, records worktree intent before Git creation, persists ownership, executes existing hash-guarded file tools behind policy/event/lease checks, and exposes durable inspection. Scripted multiple steps consume correlated observations and finite budgets. Original checkout is untouched. Mutating dispatch/publication errors remain uncertain; event/execution writes commit together.
+Expected tests: real temporary Git repo CLI success/denial/dirty-root/duplicate/failed-admission paths; fault-injected transaction/publication boundaries; focused existing tests, then full offline suite.
+Security: no provider/network calls or credentials; host Git/test execution requires explicit CLI authority, host-user isolation reported. Write scope intersects mode and exact allowed paths; no shell tool in this slice. Raw prompts/tool contents are reference-only in durable audit by default.
+Compatibility: existing one-turn CLI remains a legacy compatibility path when --state-dir is absent; durable mode is explicitly identified. No new dependencies or vendor runtime. Existing uncommitted changes are preserved.
+Status: In progress. Baseline: 484 tests passed in 27.443 seconds on 2026-11-01. Full M1/N2/N3 gates remain open until their complete acceptance evidence exists.
+
+Current checkpoint: RG-004 complete for documentation/source review and obsolete config removal. Next authorized implementation: N1 in todo.md, native CLI composition. BT-124 below is the preceding runtime checkpoint, not proof of a complete native task path. See `docs/build/NEXT_SESSION_PROMPT.md` and `docs/build/next-step.md`.
+
 RG-003 validation: checked nine affected Markdown files with no missing local links; all 10 P-series task IDs are defined exactly once; coverage has 35 rows. Documentation only; no runtime code or dependencies changed and no paper experiments were executed. The previous 60-test baseline remains the latest runtime test evidence.
 
 RG-002 documentation/research gate is validated; BT-008 remains the next runtime slice. Revised later queue: M1.H1-H2 diagnostics/loop fixtures with native loop integration -> M2.H1-H6 research tools, observability, hooks and evals -> M3.H1-H4 custom agents/delegation/joins -> M3.H5-H6 browser-use feasibility/adapter -> M4.H1-H3 durable workflows. Each is split into a small tested slice before implementation; existing BT-001 through BT-007 evidence is preserved. Full requirements are indexed by F01-F31 in `docs/feature-coverage.md`.
 
-Tracker ID: BT-101
-Canonical IDs: M4.9
-Owning module: `src/forgeweave/automation`
-Acceptance criteria: Add a workflow verification-step executor that runs selected repository verification through existing verification evidence capture and maps passed checks to succeeded and failed/no checks to failed.
-Expected checks: focused verification-executor tests, focused workflow executor/CLI tests; full `PYTHONPATH=src python -m unittest discover -s tests/unit`.
-Security impact: Verification steps run only through explicitly registered workflow executors and existing VerificationRunner evidence capture. No publication, deployment, browser, network or arbitrary model-authored code evaluation is introduced.
-Compatibility constraints: Additive executor module and registration helper; no persistence schema changes and no behavior change unless caller explicitly registers the verification workflow executor.
-Files planned: `src/forgeweave/automation/verification_executor.py`, `src/forgeweave/automation/__init__.py`, `tests/unit/test_automation_verification_executor.py`, `todo.md`, `BUILD_TRACKER.md`.
+Tracker ID: BT-124
+Canonical IDs: M1.33, M1.R3, M1.42
+Owning module: `src/forgeweave/core`, using the existing `events` owner for persistence.
+Acceptance criteria: A native-loop tool call persists requested intent before policy evaluation, persists the policy decision before dispatch, marks the call dispatching immediately before the handler, and records a terminal result or failure after dispatch. A real filesystem-writing handler is covered by an integration test proving the durable sequence and restart classification boundary.
+Expected checks: focused core-loop and tool-execution tests; full `PYTHONPATH=src python -m unittest discover -s tests/unit`.
+Security impact: Persists hashes and stable references only; does not persist raw tool arguments, tool outputs or prompts in the event log. Dispatch remains behind `PolicyGateway`; no additional permission is granted.
+Compatibility constraints: Optional recorder keeps existing in-memory native-loop users unchanged. No new external I/O, provider behavior, CLI command or workflow behavior is introduced.
+Files planned: `src/forgeweave/core/loop.py`, `tests/unit/test_core_loop.py`, `todo.md`, `BUILD_TRACKER.md`.
 Status: Done.
-Evidence: Focused `PYTHONPATH=src python -m unittest tests.unit.test_automation_verification_executor` passed 3 tests; focused `PYTHONPATH=src python -m unittest tests.unit.test_automation_verification_executor tests.unit.test_automation_agent_executor tests.unit.test_automation_tool_executor tests.unit.test_automation_runner tests.unit.test_cli_app` passed 70 tests; full `PYTHONPATH=src python -m unittest discover -s tests/unit` passed 380 tests on 2026-10-11.
-Open risks: Leases/fencing, artifact bindings, approval gates and CLI wiring for verification executor options remain open.
+Evidence: Focused `$env:PYTHONPATH='src'; python -m unittest tests.unit.test_core_loop tests.unit.test_tool_execution_events tests.unit.test_tool_execution_recovery tests.unit.test_task_recovery` passed 25 tests; full `$env:PYTHONPATH='src'; python -m unittest discover -s tests/unit` passed 484 tests in 26.649 seconds on 2026-11-01.
+Open risks: The event boundary is now live inside `NativeAgentLoop`, but CLI worktree ownership, task lifecycle orchestration, verification-after-implementation and end-to-end crash/resume remain separate M1 slices.
+
+
+
+
+
+
+
+
+
+
+
 
 
 
