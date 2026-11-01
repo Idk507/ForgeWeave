@@ -36,7 +36,6 @@ class CliAppTests(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         payload = json.loads(stdout.getvalue())
         self.assertEqual(payload["default_engine"], "native")
-        self.assertFalse(payload["laya_enabled"])
         self.assertIn("isolation", payload)
         self.assertFalse(payload["isolation"]["restricted_execution_measured"])
         self.assertEqual(payload["isolation"]["claims"]["filesystem"]["level"], "host-user")
@@ -365,6 +364,446 @@ class CliAppTests(unittest.TestCase):
         self.assertEqual(exit_code, 1)
         self.assertIn("cannot resume from status pending", stderr.getvalue())
 
+
+
+    def test_workflow_resume_rejects_changed_input_binding(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            workflow_store = Path(tmp) / "workflows.db"
+            definition_file = Path(tmp) / "workflow.json"
+            definition_file.write_text(
+                json.dumps(
+                    {
+                        "workflow_id": "wf-resume-bind",
+                        "version": 1,
+                        "input_schema": {},
+                        "output_schema": {},
+                        "steps": [{"step_id": "research", "kind": "agent"}],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            definition = WorkflowDefinition(
+                workflow_id="wf-resume-bind",
+                version=1,
+                steps=(WorkflowStep(step_id="research", kind=WorkflowStepKind.AGENT),),
+                input_schema={},
+                output_schema={},
+            )
+            store = WorkflowStore.open(workflow_store)
+            try:
+                store.record_definition(definition)
+                store.admit_run(
+                    WorkflowRun(
+                        run_id="run-1",
+                        workflow_id=definition.workflow_id,
+                        definition_hash=definition.definition_hash,
+                        input_hash=workflow_input_hash({"issue": 1}),
+                        status=WorkflowRunStatus.FAILED,
+                    )
+                )
+            finally:
+                store.close()
+            stderr = StringIO()
+
+            exit_code = main(
+                [
+                    "workflow",
+                    "resume",
+                    "--workflow-store",
+                    str(workflow_store),
+                    "--run-id",
+                    "run-1",
+                    "--definition-file",
+                    str(definition_file),
+                    "--input-json",
+                    '{"issue": 2}',
+                ],
+                stderr=stderr,
+            )
+
+        self.assertEqual(exit_code, 1)
+        self.assertIn("was admitted with input", stderr.getvalue())
+
+    def test_workflow_tick_rejects_changed_definition_binding(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            workflow_store = Path(tmp) / "workflows.db"
+            store = WorkflowStore.open(workflow_store)
+            try:
+                definition = WorkflowDefinition(
+                    workflow_id="wf-tick-bind",
+                    version=1,
+                    steps=(WorkflowStep(step_id="research", kind=WorkflowStepKind.AGENT),),
+                    input_schema={},
+                    output_schema={},
+                )
+                store.record_definition(definition)
+                store.admit_run(
+                    WorkflowRun(
+                        run_id="run-1",
+                        workflow_id=definition.workflow_id,
+                        definition_hash=definition.definition_hash,
+                        input_hash=workflow_input_hash({}),
+                    )
+                )
+            finally:
+                store.close()
+            stderr = StringIO()
+
+            exit_code = main(
+                [
+                    "workflow",
+                    "tick",
+                    "--workflow-store",
+                    str(workflow_store),
+                    "--run-id",
+                    "run-1",
+                    "--expected-definition-hash",
+                    "sha256:changed",
+                ],
+                stderr=stderr,
+            )
+
+        self.assertEqual(exit_code, 1)
+        self.assertIn("was admitted with definition", stderr.getvalue())
+
+
+    def test_workflow_cancel_command_cancels_run_and_attempt_as_json(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            workflow_store = Path(tmp) / "workflows.db"
+            store = WorkflowStore.open(workflow_store)
+            try:
+                definition = WorkflowDefinition(
+                    workflow_id="wf-cancel-cli",
+                    version=1,
+                    steps=(WorkflowStep(step_id="research", kind=WorkflowStepKind.AGENT),),
+                    input_schema={},
+                    output_schema={},
+                )
+                store.record_definition(definition)
+                store.admit_run(
+                    WorkflowRun(
+                        run_id="run-cancel",
+                        workflow_id=definition.workflow_id,
+                        definition_hash=definition.definition_hash,
+                        input_hash=workflow_input_hash({}),
+                        status=WorkflowRunStatus.RUNNING,
+                    )
+                )
+                store.record_attempt(
+                    StepAttempt(
+                        attempt_id="attempt-1",
+                        run_id="run-cancel",
+                        step_id="research",
+                        idempotency_key="attempt-1",
+                        status=WorkflowStepStatus.WAITING_EXTERNAL,
+                    )
+                )
+            finally:
+                store.close()
+            stdout = StringIO()
+
+            exit_code = main(
+                [
+                    "workflow",
+                    "cancel",
+                    "--workflow-store",
+                    str(workflow_store),
+                    "--run-id",
+                    "run-cancel",
+                    "--reason",
+                    "user stop",
+                    "--max-attempts",
+                    "1",
+                    "--json",
+                ],
+                stdout=stdout,
+            )
+
+        self.assertEqual(exit_code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(payload["run_status"], WorkflowRunStatus.CANCELLED.value)
+        self.assertEqual(payload["cancelled_attempt_ids"], ["attempt-1"])
+        self.assertEqual(payload["reason"], "user stop")
+
+    def test_workflow_cancel_command_enforces_attempt_bound(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            workflow_store = Path(tmp) / "workflows.db"
+            store = WorkflowStore.open(workflow_store)
+            try:
+                definition = WorkflowDefinition(
+                    workflow_id="wf-cancel-bound",
+                    version=1,
+                    steps=(WorkflowStep(step_id="research", kind=WorkflowStepKind.AGENT),),
+                    input_schema={},
+                    output_schema={},
+                )
+                store.record_definition(definition)
+                store.admit_run(
+                    WorkflowRun(
+                        run_id="run-cancel",
+                        workflow_id=definition.workflow_id,
+                        definition_hash=definition.definition_hash,
+                        input_hash=workflow_input_hash({}),
+                        status=WorkflowRunStatus.RUNNING,
+                    )
+                )
+                store.record_attempt(StepAttempt(attempt_id="attempt-1", run_id="run-cancel", step_id="research", idempotency_key="attempt-1", status=WorkflowStepStatus.RUNNING))
+            finally:
+                store.close()
+            stderr = StringIO()
+
+            exit_code = main(
+                [
+                    "workflow",
+                    "cancel",
+                    "--workflow-store",
+                    str(workflow_store),
+                    "--run-id",
+                    "run-cancel",
+                    "--reason",
+                    "stop",
+                    "--max-attempts",
+                    "0",
+                ],
+                stderr=stderr,
+            )
+
+        self.assertEqual(exit_code, 1)
+        self.assertIn("exceeding bound", stderr.getvalue())
+
+
+    def test_workflow_recover_command_marks_running_attempt_waiting_external(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            workflow_store = Path(tmp) / "workflows.db"
+            store = WorkflowStore.open(workflow_store)
+            try:
+                definition = WorkflowDefinition(
+                    workflow_id="wf-recover-cli",
+                    version=1,
+                    steps=(WorkflowStep(step_id="research", kind=WorkflowStepKind.AGENT),),
+                    input_schema={},
+                    output_schema={},
+                )
+                store.record_definition(definition)
+                store.admit_run(
+                    WorkflowRun(
+                        run_id="run-recover",
+                        workflow_id=definition.workflow_id,
+                        definition_hash=definition.definition_hash,
+                        input_hash=workflow_input_hash({}),
+                        status=WorkflowRunStatus.RUNNING,
+                    )
+                )
+                store.record_attempt(
+                    StepAttempt(
+                        attempt_id="attempt-running",
+                        run_id="run-recover",
+                        step_id="research",
+                        idempotency_key="running",
+                        status=WorkflowStepStatus.RUNNING,
+                    )
+                )
+            finally:
+                store.close()
+            stdout = StringIO()
+
+            exit_code = main(
+                [
+                    "workflow",
+                    "recover",
+                    "--workflow-store",
+                    str(workflow_store),
+                    "--run-id",
+                    "run-recover",
+                    "--max-attempts",
+                    "1",
+                    "--json",
+                ],
+                stdout=stdout,
+            )
+            store = WorkflowStore.open(workflow_store)
+            try:
+                recovered_attempt = store.get_attempt("attempt-running")
+            finally:
+                store.close()
+
+        self.assertEqual(exit_code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(payload["run_status"], WorkflowRunStatus.WAITING_EXTERNAL.value)
+        self.assertEqual(payload["attentions"][0]["attempt_id"], "attempt-running")
+        self.assertEqual(recovered_attempt.status, WorkflowStepStatus.WAITING_EXTERNAL)
+
+    def test_workflow_recover_command_enforces_bound(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            workflow_store = Path(tmp) / "workflows.db"
+            store = WorkflowStore.open(workflow_store)
+            try:
+                definition = WorkflowDefinition(
+                    workflow_id="wf-recover-bound",
+                    version=1,
+                    steps=(WorkflowStep(step_id="research", kind=WorkflowStepKind.AGENT),),
+                    input_schema={},
+                    output_schema={},
+                )
+                store.record_definition(definition)
+                store.admit_run(
+                    WorkflowRun(
+                        run_id="run-recover",
+                        workflow_id=definition.workflow_id,
+                        definition_hash=definition.definition_hash,
+                        input_hash=workflow_input_hash({}),
+                        status=WorkflowRunStatus.RUNNING,
+                    )
+                )
+                store.record_attempt(StepAttempt(attempt_id="attempt-running", run_id="run-recover", step_id="research", idempotency_key="running", status=WorkflowStepStatus.RUNNING))
+            finally:
+                store.close()
+            stderr = StringIO()
+
+            exit_code = main(
+                [
+                    "workflow",
+                    "recover",
+                    "--workflow-store",
+                    str(workflow_store),
+                    "--run-id",
+                    "run-recover",
+                    "--max-attempts",
+                    "0",
+                ],
+                stderr=stderr,
+            )
+
+        self.assertEqual(exit_code, 1)
+        self.assertIn("exceeding bound", stderr.getvalue())
+
+    def test_workflow_approve_command_resumes_waiting_approval_as_json(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            workflow_store = Path(tmp) / "workflows.db"
+            store = WorkflowStore.open(workflow_store)
+            try:
+                definition = WorkflowDefinition(
+                    workflow_id="wf-approval-cli",
+                    version=1,
+                    steps=(
+                        WorkflowStep(step_id="approve", kind=WorkflowStepKind.APPROVAL),
+                        WorkflowStep(step_id="verify", kind=WorkflowStepKind.VERIFICATION, depends_on=("approve",)),
+                    ),
+                    input_schema={},
+                    output_schema={},
+                )
+                store.record_definition(definition)
+                store.admit_run(
+                    WorkflowRun(
+                        run_id="run-approval",
+                        workflow_id=definition.workflow_id,
+                        definition_hash=definition.definition_hash,
+                        input_hash=workflow_input_hash({}),
+                        status=WorkflowRunStatus.WAITING_APPROVAL,
+                    )
+                )
+                store.record_attempt(
+                    StepAttempt(
+                        attempt_id="attempt-approval",
+                        run_id="run-approval",
+                        step_id="approve",
+                        idempotency_key="run-approval:approve:1",
+                        status=WorkflowStepStatus.WAITING_APPROVAL,
+                    )
+                )
+            finally:
+                store.close()
+            stdout = StringIO()
+
+            exit_code = main(
+                [
+                    "workflow",
+                    "approve",
+                    "--workflow-store",
+                    str(workflow_store),
+                    "--run-id",
+                    "run-approval",
+                    "--step-id",
+                    "approve",
+                    "--reason",
+                    "reviewed",
+                    "--json",
+                ],
+                stdout=stdout,
+            )
+            store = WorkflowStore.open(workflow_store)
+            try:
+                updated_attempt = store.get_attempt("attempt-approval")
+                updated_run = store.get_run("run-approval")
+            finally:
+                store.close()
+
+        self.assertEqual(exit_code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(payload["action"], "approve")
+        self.assertEqual(payload["step_status"], WorkflowStepStatus.SUCCEEDED.value)
+        self.assertEqual(payload["run_status"], WorkflowRunStatus.RUNNING.value)
+        self.assertEqual(payload["reason"], "reviewed")
+        self.assertEqual(updated_attempt.status, WorkflowStepStatus.SUCCEEDED)
+        self.assertEqual(updated_run.status, WorkflowRunStatus.RUNNING)
+
+    def test_workflow_reject_command_fails_waiting_approval(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            workflow_store = Path(tmp) / "workflows.db"
+            store = WorkflowStore.open(workflow_store)
+            try:
+                definition = WorkflowDefinition(
+                    workflow_id="wf-reject-cli",
+                    version=1,
+                    steps=(WorkflowStep(step_id="approve", kind=WorkflowStepKind.APPROVAL),),
+                    input_schema={},
+                    output_schema={},
+                )
+                store.record_definition(definition)
+                store.admit_run(
+                    WorkflowRun(
+                        run_id="run-reject",
+                        workflow_id=definition.workflow_id,
+                        definition_hash=definition.definition_hash,
+                        input_hash=workflow_input_hash({}),
+                        status=WorkflowRunStatus.WAITING_APPROVAL,
+                    )
+                )
+                store.record_attempt(
+                    StepAttempt(
+                        attempt_id="attempt-reject",
+                        run_id="run-reject",
+                        step_id="approve",
+                        idempotency_key="run-reject:approve:1",
+                        status=WorkflowStepStatus.WAITING_APPROVAL,
+                    )
+                )
+            finally:
+                store.close()
+            stdout = StringIO()
+
+            exit_code = main(
+                [
+                    "workflow",
+                    "reject",
+                    "--workflow-store",
+                    str(workflow_store),
+                    "--run-id",
+                    "run-reject",
+                    "--step-id",
+                    "approve",
+                    "--reason",
+                    "not safe",
+                ],
+                stdout=stdout,
+            )
+
+        self.assertEqual(exit_code, 0)
+        rendered = stdout.getvalue()
+        self.assertIn("Workflow approval reject: run-reject", rendered)
+        self.assertIn("Step status: failed", rendered)
+        self.assertIn("Run status: failed", rendered)
+
     def test_workflow_tick_command_records_ready_step_without_execution(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             workflow_store = Path(tmp) / "workflows.db"
@@ -401,6 +840,56 @@ class CliAppTests(unittest.TestCase):
         self.assertFalse(payload["execution_started"])
         self.assertEqual(payload["recorded_steps"][0]["step_id"], "research")
         self.assertEqual(payload["recorded_steps"][0]["status"], WorkflowStepStatus.WAITING_EXTERNAL.value)
+
+
+    def test_workflow_tick_command_records_worker_owned_attempt(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            workflow_store = Path(tmp) / "workflows.db"
+            store = WorkflowStore.open(workflow_store)
+            try:
+                definition = WorkflowDefinition(
+                    workflow_id="wf-worker-tick",
+                    version=1,
+                    steps=(WorkflowStep(step_id="research", kind=WorkflowStepKind.AGENT),),
+                    input_schema={},
+                    output_schema={},
+                )
+                store.record_definition(definition)
+                store.admit_run(
+                    WorkflowRun(
+                        run_id="run-1",
+                        workflow_id=definition.workflow_id,
+                        definition_hash=definition.definition_hash,
+                        input_hash=workflow_input_hash({}),
+                    )
+                )
+            finally:
+                store.close()
+            stdout = StringIO()
+
+            exit_code = main(
+                [
+                    "workflow",
+                    "tick",
+                    "--workflow-store",
+                    str(workflow_store),
+                    "--run-id",
+                    "run-1",
+                    "--worker-id",
+                    "worker-cli",
+                    "--json",
+                ],
+                stdout=stdout,
+            )
+            store = WorkflowStore.open(workflow_store)
+            try:
+                attempts = store.list_attempts("run-1")
+            finally:
+                store.close()
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(attempts[0].worker_id, "worker-cli")
+        self.assertTrue(attempts[0].lease_token.startswith("workflow-lease:"))
 
     def test_workflow_tick_command_can_run_native_agent_executor(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -508,6 +997,64 @@ class CliAppTests(unittest.TestCase):
         self.assertEqual(payload["recorded_steps"][0]["step_id"], "write")
         self.assertEqual(payload["recorded_steps"][0]["status"], WorkflowStepStatus.SUCCEEDED.value)
         self.assertFalse((repo_root / "out.txt").exists())
+
+    def test_workflow_tick_command_can_run_verification_executor(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            workflow_store = Path(tmp) / "workflows.db"
+            repo_root = Path(tmp) / "repo"
+            tests_dir = repo_root / "tests"
+            tests_dir.mkdir(parents=True)
+            (tests_dir / "test_sample.py").write_text(
+                "import unittest\n\nclass SampleTests(unittest.TestCase):\n    def test_ok(self):\n        self.assertTrue(True)\n",
+                encoding="utf-8",
+            )
+            output_dir = Path(tmp) / "verify-artifacts"
+            store = WorkflowStore.open(workflow_store)
+            try:
+                definition = WorkflowDefinition(
+                    workflow_id="wf-verify-tick",
+                    version=1,
+                    steps=(WorkflowStep(step_id="verify", kind=WorkflowStepKind.VERIFICATION),),
+                    input_schema={},
+                    output_schema={},
+                )
+                store.record_definition(definition)
+                store.admit_run(
+                    WorkflowRun(
+                        run_id="run-1",
+                        workflow_id=definition.workflow_id,
+                        definition_hash=definition.definition_hash,
+                        input_hash=workflow_input_hash({}),
+                    )
+                )
+            finally:
+                store.close()
+            stdout = StringIO()
+
+            exit_code = main(
+                [
+                    "workflow",
+                    "tick",
+                    "--workflow-store",
+                    str(workflow_store),
+                    "--run-id",
+                    "run-1",
+                    "--enable-verification-executor",
+                    "--repo-root",
+                    str(repo_root),
+                    "--verification-output-dir",
+                    str(output_dir),
+                    "--json",
+                ],
+                stdout=stdout,
+            )
+            artifact_exists = any(output_dir.glob("verify-output-*.txt"))
+
+        self.assertEqual(exit_code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(payload["recorded_steps"][0]["step_id"], "verify")
+        self.assertEqual(payload["recorded_steps"][0]["status"], WorkflowStepStatus.SUCCEEDED.value)
+        self.assertTrue(artifact_exists)
 
     def test_workflow_status_command_renders_persisted_projection_as_json(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
